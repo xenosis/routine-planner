@@ -27,7 +27,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-04-17 기준)
+## 현재 구현 상태 (2026-04-17 기준, weekly_count 추가 완료)
 
 ### 파일 구조
 ```
@@ -89,14 +89,17 @@ id TEXT PRIMARY KEY
 title TEXT NOT NULL
 category TEXT NOT NULL DEFAULT '기타'   -- '운동'|'공부'|'청소'|'관리'|'기타'
 color TEXT NOT NULL DEFAULT '#94A3B8'
-frequency TEXT NOT NULL DEFAULT 'daily' -- 'daily'|'weekly_days'
+frequency TEXT NOT NULL DEFAULT 'daily' -- 'daily'|'weekly_days'|'weekly_count'
 weekdays TEXT                           -- JSON 배열, JS getDay() 기준 (0=일,1=월...6=토)
+                                        -- weekly_days: 루틴 예정 요일
+                                        -- weekly_count: 알람 요일 (루틴 요일과 독립)
+weekly_count INTEGER                    -- 주 N회 목표 횟수 (2~6, weekly_count일 때만 유효)
 alarm INTEGER NOT NULL DEFAULT 0
-alarmTime TEXT                          -- HH:mm (daily 단일 알람)
+alarmTime TEXT                          -- HH:mm
 streak INTEGER NOT NULL DEFAULT 0
 createdAt TEXT NOT NULL
 ```
-- `frequency`, `weekdays`는 `ALTER TABLE` 마이그레이션으로 추가된 컬럼
+- `frequency`, `weekdays`, `weekly_count`는 `ALTER TABLE` 마이그레이션으로 추가된 컬럼
 - `targetMinutes`는 UI에서 제거됨 (DB 컬럼은 잔존, 무시)
 
 #### routine_completions 테이블
@@ -118,28 +121,39 @@ UNIQUE(routineId, date)
 
 ### 루틴 알람 시스템
 - **daily**: 단일 DAILY 트리거, 알람 ID = `{routineId}`
-- **weekly_days**: 선택된 요일마다 WEEKLY 트리거, 알람 ID = `{routineId}_{index}`
+- **weekly_days**: 루틴 예정 요일마다 WEEKLY 트리거, 알람 ID = `{routineId}_{jsDay}`
+- **weekly_count**: 사용자가 별도 선택한 알람 요일마다 WEEKLY 트리거, 알람 ID = `{routineId}_{jsDay}`
+  - 알람 요일은 루틴 빈도(주 N회)와 독립적으로 설정 (weekdays 필드 재사용)
+  - 알람 요일 미선택 시 알람 미등록
 - Expo WEEKLY trigger 요일 변환: `jsDay === 0 ? 1 : jsDay + 1` (Expo는 1=일 기준)
-- 루틴 삭제 시 `{id}_0` ~ `{id}_6` 모두 취소 시도
+- 루틴 삭제 시 `{id}` + `{id}_0` ~ `{id}_6` 모두 취소 시도
 
 ### 루틴 화면 (RoutineScreen) 탭 구조
 - **SegmentedButtons** 탭: `[오늘의 루틴 | 내 루틴 관리]`
-- **오늘의 루틴 탭**: 오늘 요일에 해당하는 루틴만 표시, 체크 버튼으로 완료 처리, 미완료→완료 정렬
+- **오늘의 루틴 탭**: daily/weekly_count → 항상 표시, weekly_days → 오늘 요일만 표시
+  - 체크 버튼으로 완료 처리, 미완료→완료 정렬
+  - weekly_count: quota 달성 시 카드 흐려짐 + 체크 비활성 (오늘 체크한 것은 취소 가능)
 - **내 루틴 관리 탭**: 전체 루틴 표시(등록순), 체크 버튼 없음, 탭하면 수정 모달 열림
 - **헤더 카드**: 탭 전환과 무관하게 항상 오늘 기준 진행률 표시
+  - weekly_count 진행률: quota 달성 여부로 계산
 - **빈 상태**:
-  - 오늘 탭 + 루틴 있는데 오늘 예정 없음 → "오늘 예정된 루틴이 없어요 / 내 루틴 관리 탭에서 확인하세요" (탭 불가)
+  - 오늘 탭 + 루틴 있는데 오늘 예정 없음 → "오늘 예정된 루틴이 없어요" (탭 불가)
   - 루틴 자체 없음 → "루틴을 추가해보세요" (탭하면 추가 모달)
 
 ### RoutineItem 카드 구성
 ```
 [색상바] [제목                        ] [🗑] [○/●]
          [카테고리 · 빈도 · 🔥스트릭 · 🔔알람]
-         [● ● ○ ○ ● ○ ●]  ← 주간 완료 도트 (월~일)
+         [● ● ○ ○ ● ○ ●]  ← 주간 완료 도트
 ```
-- 빈도 라벨: `'매일'` 또는 `'주 N회 · 월수금'` 형태
-- 주간 도트: 예정 요일은 완료(채움)/미완료(테두리), 비예정 요일은 빈 공간(placeholder)
-- `showCheckButton={false}` prop으로 체크 버튼 숨김 (내 루틴 관리 탭용)
+- 빈도 라벨: `'매일'` / `'주 N회 · 월수금'` / `'주 N회'` 형태
+- 주간 도트 (frequency별 다름):
+  - `daily` / `weekly_days`: 월~일 7개 dot, 예정 요일만 완료(채움)/미완료(테두리), 비예정은 placeholder
+  - `weekly_count`: 목표 횟수만큼 dot 나열 (예: 주3회 → dot 3개), 완료 수만큼 채움 `●●○`
+- Props:
+  - `isQuotaMet`: weekly_count quota 달성 여부 → 카드 흐려짐, 체크 버튼 비활성
+  - `showCheckButton={false}`: 체크 버튼 숨김 (내 루틴 관리 탭용)
+  - 체크 버튼 `disabled` 조건: `isQuotaMet && !isCompleted` (취소는 허용)
 
 ### 일정/루틴 삭제 기능
 - **카드 우측 삭제 버튼**: `trash-can-outline` 아이콘 → Alert 확인 후 삭제
@@ -185,12 +199,14 @@ UNIQUE(routineId, date)
 ### 루틴 추가/수정 화면 (AddRoutineScreen) 레이아웃
 ```
 [제목]
-[카테고리]          ← 드롭다운 (운동/공부/청소/관리/기타, 색상 dot)
-[빈도]              ← SegmentedButtons [매일 | 요일 선택]
-  └ 요일 선택 시 → [월][화][수][목][금][토][일] 토글 버튼
+[카테고리]          ← SegmentedButtons (운동/공부/청소/관리/기타, 색상 dot)
+[빈도]              ← SegmentedButtons [매일 | 요일 지정 | 주 N회]
+  └ 요일 지정 시  → [월][화][수][목][금][토][일] 토글 버튼
+  └ 주 N회 선택 시 → [2회][3회][4회][5회][6회] 횟수 버튼
 --- Divider ---
 [알람 토글]
-  └ ON → HH:mm 시간 입력
+  └ ON → HH:mm 시간 입력 (TimePicker)
+         주 N회일 때만: [알람 요일] [월][화][수][목][금][토][일] 별도 선택
 --- 하단 버튼 ---
 수정 모드: [삭제(flex:1)] [수정완료(flex:2)]
 추가 모드: [루틴 저장(full)]
@@ -242,4 +258,11 @@ fetchCompletions(date)
 fetchWeekCompletions()               // 현재 주 월~일 기준 완료 현황
 addRoutine / updateRoutine / deleteRoutine
 toggleCompletion(routineId)          // 완료/취소 토글, 스트릭 재계산
+                                     // weekly_count: quota 초과 시 추가 체크 차단
+                                     //   (단, 오늘 체크한 것은 취소 가능)
 ```
+
+### 스트릭 계산 방식 (calculateStreak)
+- **daily**: 오늘(또는 어제)부터 역산, 연속 완료 일수
+- **weekly_days**: 예정된 요일만 역산, 연속 완료 회수
+- **weekly_count**: 이번 주부터 역산, 연속으로 quota 달성한 주 수 (단위: 주)
