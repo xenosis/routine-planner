@@ -92,4 +92,10 @@ export async function initDatabase(): Promise<void> {
   } catch {
     // 컬럼이 이미 존재하면 무시
   }
+  // routines 테이블 마이그레이션: weekly_count 컬럼 추가 (주 N회 빈도용)
+  try {
+    await db.execAsync('ALTER TABLE routines ADD COLUMN weekly_count INTEGER');
+  } catch {
+    // 컬럼이 이미 존재하면 무시
+  }
 }

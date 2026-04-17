@@ -10,6 +10,7 @@ const DAY_LABELS: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '�
 
 function formatFrequency(routine: Routine): string {
   if (routine.frequency === 'daily') return '매일';
+  if (routine.frequency === 'weekly_count') return `주 ${routine.weeklyCount ?? '?'}회`;
   if (!routine.weekdays || routine.weekdays.length === 0) return '요일 선택';
   const days = [...routine.weekdays]
     .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
@@ -49,6 +50,8 @@ interface RoutineItemProps {
   isCompleted: boolean;
   /** 이번 주 완료된 날짜 배열 (e.g. ['2026-04-14', '2026-04-16']) */
   weekCompletions: string[];
+  /** weekly_count 루틴의 이번 주 quota 달성 여부 */
+  isQuotaMet?: boolean;
   /** false이면 체크 버튼 숨김 (내 루틴 관리 탭용, 기본값 true) */
   showCheckButton?: boolean;
   onToggle: (routineId: string) => void;
@@ -61,6 +64,7 @@ export default function RoutineItem({
   routine,
   isCompleted,
   weekCompletions,
+  isQuotaMet = false,
   showCheckButton = true,
   onToggle,
   onPress,
@@ -94,8 +98,8 @@ export default function RoutineItem({
       style={[
         styles.surface,
         { backgroundColor: theme.colors.surface },
-        // 완료된 항목은 전체 opacity 낮춤
-        isCompleted && styles.surfaceCompleted,
+        // 완료된 항목 또는 weekly_count quota 달성 시 opacity 낮춤
+        (isCompleted || isQuotaMet) && styles.surfaceCompleted,
       ]}
       elevation={1}
     >
@@ -117,9 +121,9 @@ export default function RoutineItem({
             style={[
               styles.title,
               { color: theme.colors.onSurface },
-              // 완료 시 취소선 + 흐려짐
-              isCompleted && styles.titleCompleted,
-              isCompleted && { color: theme.colors.onSurfaceVariant },
+              // 완료 또는 quota 달성 시 취소선 + 흐려짐
+              (isCompleted || isQuotaMet) && styles.titleCompleted,
+              (isCompleted || isQuotaMet) && { color: theme.colors.onSurfaceVariant },
             ]}
             numberOfLines={1}
             ellipsizeMode="tail"
@@ -162,35 +166,52 @@ export default function RoutineItem({
           </View>
 
           {/* 주간 완료 현황 도트 */}
-          <View style={styles.weekRow}>
-            {WEEK_DAYS.map(({ label, jsDay }, index) => {
-              const date = weekDates[index];
-              // daily는 모든 요일 표시, weekly_days는 선택된 요일만 표시
-              const isScheduled = routine.frequency === 'daily' || routine.weekdays?.includes(jsDay);
-              const isDone = weekCompletions.includes(date);
-
-              // 예정되지 않은 요일은 빈 공간으로 처리
-              if (!isScheduled) {
-                return <View key={jsDay} style={styles.weekDotPlaceholder} />;
-              }
-
-              return (
-                <View key={jsDay} style={styles.weekDotItem}>
+          {routine.frequency === 'weekly_count' && routine.weeklyCount ? (
+            // weekly_count: 목표 횟수만큼 dot 나열, 완료 수만큼 채움 (●●○)
+            <View style={styles.weekRow}>
+              {Array.from({ length: routine.weeklyCount }, (_, i) => (
+                <View key={i} style={styles.weekDotItem}>
                   <View
                     style={[
                       styles.weekDot,
-                      isDone
+                      i < weekCompletions.length
                         ? { backgroundColor: routine.color }
                         : { borderColor: theme.colors.outlineVariant, borderWidth: 1 },
                     ]}
                   />
-                  <Text style={[styles.weekDotLabel, { color: theme.colors.onSurfaceVariant }]}>
-                    {label}
-                  </Text>
                 </View>
-              );
-            })}
-          </View>
+              ))}
+            </View>
+          ) : (
+            // daily / weekly_days: 요일별 도트 (월~일)
+            <View style={styles.weekRow}>
+              {WEEK_DAYS.map(({ label, jsDay }, index) => {
+                const date = weekDates[index];
+                const isScheduled = routine.frequency === 'daily' || routine.weekdays?.includes(jsDay);
+                const isDone = weekCompletions.includes(date);
+
+                if (!isScheduled) {
+                  return <View key={jsDay} style={styles.weekDotPlaceholder} />;
+                }
+
+                return (
+                  <View key={jsDay} style={styles.weekDotItem}>
+                    <View
+                      style={[
+                        styles.weekDot,
+                        isDone
+                          ? { backgroundColor: routine.color }
+                          : { borderColor: theme.colors.outlineVariant, borderWidth: 1 },
+                      ]}
+                    />
+                    <Text style={[styles.weekDotLabel, { color: theme.colors.onSurfaceVariant }]}>
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
 
         {/* 삭제 버튼 */}
@@ -212,16 +233,17 @@ export default function RoutineItem({
         {showCheckButton && (
           <TouchableOpacity
             style={styles.checkButton}
-            onPress={handleToggle}
+            onPress={(isQuotaMet && !isCompleted) ? undefined : handleToggle}
+            disabled={isQuotaMet && !isCompleted}
             hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
             accessibilityRole="checkbox"
-            accessibilityState={{ checked: isCompleted }}
-            accessibilityLabel={isCompleted ? '완료 취소' : '완료로 표시'}
+            accessibilityState={{ checked: isCompleted || isQuotaMet }}
+            accessibilityLabel={(isCompleted || isQuotaMet) ? '완료 취소' : '완료로 표시'}
           >
             <MaterialCommunityIcons
-              name={isCompleted ? 'check-circle' : 'circle-outline'}
+              name={(isCompleted || isQuotaMet) ? 'check-circle' : 'circle-outline'}
               size={26}
-              color={isCompleted ? theme.colors.primary : theme.colors.outline}
+              color={(isCompleted || isQuotaMet) ? theme.colors.primary : theme.colors.outline}
             />
           </TouchableOpacity>
         )}

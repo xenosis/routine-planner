@@ -9,8 +9,11 @@ export interface Routine {
   title: string;
   category: '운동' | '공부' | '청소' | '관리' | '기타';
   color: string;
-  frequency: 'daily' | 'weekly_days';
-  weekdays?: number[];  // JS getDay() 기준: 0=일,1=월,...,6=토. weekly_days일 때만 유효
+  frequency: 'daily' | 'weekly_days' | 'weekly_count';
+  /** weekly_days: 루틴 예정 요일 / weekly_count: 알람 요일 (JS getDay() 기준: 0=일,...,6=토) */
+  weekdays?: number[];
+  /** 주 N회 목표 횟수 (weekly_count일 때만 유효, 2~6) */
+  weeklyCount?: number;
   alarm: boolean;
   alarmTime?: string;   // HH:mm
   streak: number;
@@ -28,6 +31,7 @@ interface RoutineRow {
   color: string;
   frequency: string | null;
   weekdays: string | null;
+  weekly_count: number | null;
   alarm: number;
   alarmTime: string | null;
   streak: number;
@@ -46,6 +50,7 @@ function rowToRoutine(row: RoutineRow): Routine {
     color: row.color,
     frequency: (row.frequency ?? 'daily') as Routine['frequency'],
     weekdays,
+    weeklyCount: row.weekly_count ?? undefined,
     alarm: row.alarm === 1,
     alarmTime: row.alarmTime ?? undefined,
     streak: row.streak,
@@ -63,7 +68,7 @@ function rowToRoutine(row: RoutineRow): Routine {
 export async function getAllRoutines(): Promise<Routine[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<RoutineRow>(
-    'SELECT id, title, category, color, frequency, weekdays, alarm, alarmTime, streak, createdAt FROM routines ORDER BY createdAt ASC',
+    'SELECT id, title, category, color, frequency, weekdays, weekly_count, alarm, alarmTime, streak, createdAt FROM routines ORDER BY createdAt ASC',
   );
   return rows.map(rowToRoutine);
 }
@@ -86,8 +91,8 @@ export async function getCompletedIds(date: string): Promise<string[]> {
 export async function insertRoutine(routine: Routine): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO routines (id, title, category, color, frequency, weekdays, alarm, alarmTime, streak, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO routines (id, title, category, color, frequency, weekdays, weekly_count, alarm, alarmTime, streak, createdAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       routine.id,
       routine.title,
@@ -95,6 +100,7 @@ export async function insertRoutine(routine: Routine): Promise<void> {
       routine.color,
       routine.frequency,
       routine.weekdays ? JSON.stringify(routine.weekdays) : null,
+      routine.weeklyCount ?? null,
       routine.alarm ? 1 : 0,
       routine.alarmTime ?? null,
       routine.streak,
@@ -110,7 +116,7 @@ export async function updateRoutine(routine: Routine): Promise<void> {
   const db = await getDb();
   await db.runAsync(
     `UPDATE routines
-     SET title = ?, category = ?, color = ?, frequency = ?, weekdays = ?,
+     SET title = ?, category = ?, color = ?, frequency = ?, weekdays = ?, weekly_count = ?,
          alarm = ?, alarmTime = ?, streak = ?
      WHERE id = ?`,
     [
@@ -119,6 +125,7 @@ export async function updateRoutine(routine: Routine): Promise<void> {
       routine.color,
       routine.frequency,
       routine.weekdays ? JSON.stringify(routine.weekdays) : null,
+      routine.weeklyCount ?? null,
       routine.alarm ? 1 : 0,
       routine.alarmTime ?? null,
       routine.streak,
@@ -220,11 +227,16 @@ function getPrevScheduledDate(dateStr: string, weekdays: number[]): string | nul
 }
 
 /**
- * 특정 루틴의 현재 스트릭(연속 달성 일수)을 계산한다.
+ * 특정 루틴의 현재 스트릭을 계산한다.
  * - daily: 오늘(또는 어제)부터 역산하며 연속 완료된 날 수 반환
  * - weekly_days: 예정된 요일만 역산하며 연속 완료된 회수 반환
+ * - weekly_count: 주 단위로 역산하며 연속으로 quota 달성한 주 수 반환
  */
-export async function calculateStreak(routineId: string, weekdays?: number[]): Promise<number> {
+export async function calculateStreak(
+  routineId: string,
+  weekdays?: number[],
+  weeklyCount?: number,
+): Promise<number> {
   const db = await getDb();
 
   // 완료된 날짜를 내림차순으로 모두 가져온다
@@ -238,6 +250,39 @@ export async function calculateStreak(routineId: string, weekdays?: number[]): P
   // 완료 날짜를 Set으로 변환하여 O(1) 조회 가능하게 한다
   const completedDates = new Set(rows.map((r) => r.date));
   const today = new Date().toISOString().split('T')[0];
+
+  if (weeklyCount && weeklyCount > 0) {
+    // weekly_count: 주 단위 역산 — 연속으로 quota를 달성한 주 수를 반환
+
+    function getWeekStart(dateStr: string): string {
+      const d = new Date(dateStr + 'T00:00:00Z');
+      const day = d.getUTCDay(); // 0=일
+      const diff = day === 0 ? 6 : day - 1; // 월요일 기준
+      d.setUTCDate(d.getUTCDate() - diff);
+      return d.toISOString().split('T')[0];
+    }
+    function getPrevWeekStart(ws: string): string {
+      const d = new Date(ws + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() - 7);
+      return d.toISOString().split('T')[0];
+    }
+
+    // 주별 완료 횟수 맵 구성
+    const weekCountMap: Record<string, number> = {};
+    for (const d of completedDates) {
+      const ws = getWeekStart(d);
+      weekCountMap[ws] = (weekCountMap[ws] ?? 0) + 1;
+    }
+
+    // 이번 주부터 역산하여 연속 달성 주 수 카운트
+    let streak = 0;
+    let checkWeek = getWeekStart(today);
+    while ((weekCountMap[checkWeek] ?? 0) >= weeklyCount) {
+      streak++;
+      checkWeek = getPrevWeekStart(checkWeek);
+    }
+    return streak;
+  }
 
   if (weekdays && weekdays.length > 0) {
     // weekly_days: 예정된 날짜만 역산하며 스트릭 계산

@@ -110,10 +110,14 @@ async function scheduleRoutineAlarm(routine: Routine): Promise<void> {
         content: { title: '루틴 알림', body: `${routine.title} 할 시간이에요!` },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
       });
-    } else if (routine.frequency === 'weekly_days' && routine.weekdays) {
+    } else if (
+      (routine.frequency === 'weekly_days' || routine.frequency === 'weekly_count') &&
+      routine.weekdays && routine.weekdays.length > 0
+    ) {
       // 요일별 주간 반복 알람
+      // weekly_days: 루틴 예정 요일에 알람
+      // weekly_count: 사용자가 별도 선택한 알람 요일에 알람
       // Expo WEEKLY weekday: 1=일, 2=월, ..., 7=토 (JS getDay()와 다름)
-      // JS jsDay 0(일)→ expoWeekday 1, jsDay 1(월)→2, ..., jsDay 6(토)→7
       for (const jsDay of routine.weekdays) {
         const expoWeekday = jsDay === 0 ? 1 : jsDay + 1;
         await Notifications.scheduleNotificationAsync({
@@ -251,6 +255,7 @@ export default function AddRoutineScreen({
   const [category, setCategory] = useState<Routine['category']>('운동');
   const [frequency, setFrequency] = useState<Routine['frequency']>('daily');
   const [weekdays, setWeekdays] = useState<number[]>([]);
+  const [weeklyCount, setWeeklyCount] = useState<number>(3);
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState('07:00');
 
@@ -261,6 +266,7 @@ export default function AddRoutineScreen({
       setCategory(routine.category);
       setFrequency(routine.frequency);
       setWeekdays(routine.weekdays ?? []);
+      setWeeklyCount(routine.weeklyCount ?? 3);
       setAlarmEnabled(routine.alarm);
       setAlarmTime(routine.alarmTime ?? '07:00');
     } else {
@@ -269,6 +275,7 @@ export default function AddRoutineScreen({
       setCategory('운동');
       setFrequency('daily');
       setWeekdays([]);
+      setWeeklyCount(3);
       setAlarmEnabled(false);
       setAlarmTime('07:00');
     }
@@ -285,8 +292,9 @@ export default function AddRoutineScreen({
 
   // 저장 처리
   const handleSave = useCallback(async () => {
-    if (!title.trim()) return; // 제목 필수
-    if (frequency === 'weekly_days' && weekdays.length === 0) return; // 요일 선택 필수
+    if (!title.trim()) return;
+    if (frequency === 'weekly_days' && weekdays.length === 0) return;
+    if (frequency === 'weekly_count' && weeklyCount < 2) return;
 
     const newRoutine: Routine = {
       id: routine?.id ?? generateId(),
@@ -294,18 +302,19 @@ export default function AddRoutineScreen({
       category,
       color: ROUTINE_CATEGORY_COLORS[category],
       frequency,
-      weekdays: frequency === 'weekly_days' ? weekdays : undefined,
+      // weekly_days: 루틴 예정 요일 / weekly_count: 알람 요일
+      weekdays: (frequency === 'weekly_days' || frequency === 'weekly_count') ? weekdays : undefined,
+      weeklyCount: frequency === 'weekly_count' ? weeklyCount : undefined,
       alarm: alarmEnabled,
       alarmTime: alarmEnabled ? alarmTime : undefined,
-      streak: routine?.streak ?? 0,               // 수정 시 기존 스트릭 유지
-      createdAt: routine?.createdAt ?? getTodayString(), // 수정 시 기존 생성일 유지
+      streak: routine?.streak ?? 0,
+      createdAt: routine?.createdAt ?? getTodayString(),
     };
 
     // 알람 예약 처리
     if (alarmEnabled && alarmTime) {
       await scheduleRoutineAlarm(newRoutine);
     } else if (!alarmEnabled) {
-      // 알람을 끈 경우 기존 알람 전체 취소
       await Notifications.cancelScheduledNotificationAsync(newRoutine.id).catch(() => {});
       for (let day = 0; day <= 6; day++) {
         await Notifications.cancelScheduledNotificationAsync(`${newRoutine.id}_${day}`).catch(() => {});
@@ -314,11 +323,14 @@ export default function AddRoutineScreen({
 
     onSave(newRoutine);
   }, [
-    title, category, frequency, weekdays, alarmEnabled, alarmTime, routine, onSave,
+    title, category, frequency, weekdays, weeklyCount, alarmEnabled, alarmTime, routine, onSave,
   ]);
 
   // 저장 버튼 비활성화 조건
-  const isSaveDisabled = !title.trim() || (frequency === 'weekly_days' && weekdays.length === 0);
+  const isSaveDisabled =
+    !title.trim() ||
+    (frequency === 'weekly_days' && weekdays.length === 0) ||
+    (frequency === 'weekly_count' && weeklyCount < 2);
 
   return (
     <Modal
@@ -388,10 +400,15 @@ export default function AddRoutineScreen({
           </Text>
           <SegmentedButtons
             value={frequency}
-            onValueChange={(val) => setFrequency(val as Routine['frequency'])}
+            onValueChange={(val) => {
+              setFrequency(val as Routine['frequency']);
+              setWeekdays([]);
+              setWeeklyCount(3);
+            }}
             buttons={[
               { value: 'daily', label: '매일' },
-              { value: 'weekly_days', label: '요일 선택' },
+              { value: 'weekly_days', label: '요일 지정' },
+              { value: 'weekly_count', label: '주 N회' },
             ]}
             style={styles.segmented}
           />
@@ -441,6 +458,44 @@ export default function AddRoutineScreen({
             </Text>
           )}
 
+          {/* 주 N회 횟수 선택 버튼 (weekly_count 선택 시에만 표시) */}
+          {frequency === 'weekly_count' && (
+            <View style={styles.countRow}>
+              {[2, 3, 4, 5, 6].map((n) => {
+                const isSelected = weeklyCount === n;
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    onPress={() => setWeeklyCount(n)}
+                    style={[
+                      styles.countButton,
+                      {
+                        backgroundColor: isSelected
+                          ? theme.colors.primary
+                          : theme.colors.surfaceVariant,
+                      },
+                    ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <Text
+                      style={[
+                        styles.countLabel,
+                        {
+                          color: isSelected
+                            ? theme.colors.onPrimary
+                            : theme.colors.onSurfaceVariant,
+                        },
+                      ]}
+                    >
+                      {n}회
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
           <Divider style={styles.divider} />
 
           {/* 4. 알람 스위치 */}
@@ -450,7 +505,11 @@ export default function AddRoutineScreen({
                 알람
               </Text>
               <Text style={[styles.alarmSub, { color: theme.colors.onSurfaceVariant }]}>
-                {frequency === 'daily' ? '매일 정해진 시간에 알림 받기' : '선택한 요일에 알림 받기'}
+                {frequency === 'daily'
+                  ? '매일 정해진 시간에 알림 받기'
+                  : frequency === 'weekly_count'
+                  ? '알림 받을 요일을 선택하세요'
+                  : '선택한 요일에 알림 받기'}
               </Text>
             </View>
             <Switch
@@ -463,6 +522,50 @@ export default function AddRoutineScreen({
           {/* 알람 시간 선택 (알람 켰을 때만 표시) */}
           {alarmEnabled && (
             <TimePicker value={alarmTime} onChange={setAlarmTime} />
+          )}
+
+          {/* 알람 요일 선택 (weekly_count + 알람 ON 시에만 표시) */}
+          {frequency === 'weekly_count' && alarmEnabled && (
+            <>
+              <Text style={[styles.alarmWeekdayLabel, { color: theme.colors.onSurfaceVariant }]}>
+                알람 요일
+              </Text>
+              <View style={styles.weekdayRow}>
+                {WEEKDAY_BUTTONS.map(({ label, jsDay }) => {
+                  const isSelected = weekdays.includes(jsDay);
+                  return (
+                    <TouchableOpacity
+                      key={jsDay}
+                      onPress={() => handleWeekdayToggle(jsDay)}
+                      style={[
+                        styles.weekdayButton,
+                        {
+                          backgroundColor: isSelected
+                            ? theme.colors.primary
+                            : theme.colors.surfaceVariant,
+                        },
+                      ]}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={`${label}요일 알람 ${isSelected ? '선택됨' : '선택 안 됨'}`}
+                    >
+                      <Text
+                        style={[
+                          styles.weekdayLabel,
+                          {
+                            color: isSelected
+                              ? theme.colors.onPrimary
+                              : theme.colors.onSurfaceVariant,
+                          },
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
           )}
 
           {/* 하단 여백 (저장 버튼 가림 방지) */}
@@ -570,6 +673,33 @@ const styles = StyleSheet.create({
   weekdayHint: {
     fontSize: 12,
     marginBottom: spacing.sm,
+  },
+  // 주 N회 횟수 선택
+  countRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+    flexWrap: 'wrap',
+  },
+  countButton: {
+    paddingHorizontal: spacing.md,
+    height: 40,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 52,
+  },
+  countLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  // 알람 요일 레이블 (weekly_count용)
+  alarmWeekdayLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+    letterSpacing: 0.3,
   },
   divider: {
     marginVertical: spacing.base,

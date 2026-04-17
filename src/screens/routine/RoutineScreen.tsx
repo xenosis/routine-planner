@@ -63,15 +63,22 @@ export default function RoutineScreen(): React.JSX.Element {
     init();
   }, []);
 
-  // 오늘 요일 기준으로 표시할 루틴 필터링 (daily는 항상, weekly_days는 해당 요일만)
+  // 오늘 요일 기준으로 표시할 루틴 필터링
+  // daily → 항상 / weekly_days → 해당 요일만 / weekly_count → 항상 (quota 달성 여부와 무관)
   const todayDayOfWeek = useMemo(() => new Date().getDay(), []);
 
   const todayRoutines = useMemo(() => {
     return routines.filter((r) => {
-      if (r.frequency === 'daily') return true;
+      if (r.frequency === 'daily' || r.frequency === 'weekly_count') return true;
       return r.weekdays?.includes(todayDayOfWeek) ?? false;
     });
   }, [routines, todayDayOfWeek]);
+
+  // weekly_count 루틴의 이번 주 quota 달성 여부 계산
+  const getIsQuotaMet = useCallback((item: Routine): boolean => {
+    if (item.frequency !== 'weekly_count' || !item.weeklyCount) return false;
+    return (weekCompletions[item.id]?.length ?? 0) >= item.weeklyCount;
+  }, [weekCompletions]);
 
   // 미완료 → 완료 순서로 정렬 (오늘 루틴 기준)
   const sortedRoutines = useMemo(() => {
@@ -86,10 +93,17 @@ export default function RoutineScreen(): React.JSX.Element {
   }, [routines]);
 
   // 진행률 계산 (0 ~ 1, 오늘 루틴 기준)
+  // weekly_count는 quota 달성 여부로 완료 판단
   const progress = useMemo(() => {
     if (todayRoutines.length === 0) return 0;
-    return completedIds.filter((id) => todayRoutines.some((r) => r.id === id)).length / todayRoutines.length;
-  }, [todayRoutines, completedIds]);
+    const doneCount = todayRoutines.filter((r) => {
+      if (r.frequency === 'weekly_count' && r.weeklyCount) {
+        return (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
+      }
+      return completedIds.includes(r.id);
+    }).length;
+    return doneCount / todayRoutines.length;
+  }, [todayRoutines, completedIds, weekCompletions]);
 
   // FAB — 루틴 추가 모달 열기
   const handleFABPress = useCallback(() => {
@@ -200,13 +214,14 @@ export default function RoutineScreen(): React.JSX.Element {
       routine={item}
       isCompleted={completedIds.includes(item.id)}
       weekCompletions={weekCompletions[item.id] ?? []}
+      isQuotaMet={getIsQuotaMet(item)}
       showCheckButton
       onToggle={handleToggle}
       onPress={handleItemPress}
       onLongPress={handleItemDelete}
       onDelete={handleItemDelete}
     />
-  ), [completedIds, weekCompletions, handleToggle, handleItemPress, handleItemDelete]);
+  ), [completedIds, weekCompletions, getIsQuotaMet, handleToggle, handleItemPress, handleItemDelete]);
 
   // 전체 탭 아이템 렌더러 (체크 버튼 없음, 탭하면 수정 모달)
   const renderAllItem = useCallback(({ item }: { item: Routine }) => (
@@ -248,9 +263,14 @@ export default function RoutineScreen(): React.JSX.Element {
           </Text>
         </View>
 
-        {/* 완료 카운트 (오늘 루틴 기준) */}
+        {/* 완료 카운트 (오늘 루틴 기준, weekly_count는 quota 달성 기준) */}
         <Text style={[styles.completionCount, { color: theme.colors.onSurfaceVariant }]}>
-          {completedIds.filter((id) => todayRoutines.some((r) => r.id === id)).length} / {todayRoutines.length} 완료
+          {todayRoutines.filter((r) => {
+            if (r.frequency === 'weekly_count' && r.weeklyCount) {
+              return (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
+            }
+            return completedIds.includes(r.id);
+          }).length} / {todayRoutines.length} 완료
         </Text>
 
         {/* 진행률 바 */}

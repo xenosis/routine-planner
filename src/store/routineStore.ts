@@ -133,15 +133,23 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
 
   toggleCompletion: async (routineId: string) => {
     const { selectedDate } = get();
+    const routine = get().routines.find(r => r.id === routineId);
+
+    // weekly_count: quota 달성 + 오늘 미체크 상태면 추가 체크 불가
+    if (routine?.frequency === 'weekly_count' && routine.weeklyCount) {
+      const thisWeekDone = get().weekCompletions[routineId]?.length ?? 0;
+      const alreadyToday = get().completedIds.includes(routineId);
+      if (thisWeekDone >= routine.weeklyCount && !alreadyToday) return;
+    }
 
     // 1. 완료 상태 토글 (DB)
     await dbToggleCompletion(routineId, selectedDate);
 
-    // 2. 해당 루틴의 frequency와 weekdays를 가져와서 streak 계산에 전달
-    const routine = get().routines.find(r => r.id === routineId);
+    // 2. 스트릭 재계산 (frequency별 파라미터 전달)
     const newStreak = await calculateStreak(
       routineId,
       routine?.frequency === 'weekly_days' ? routine.weekdays : undefined,
+      routine?.frequency === 'weekly_count' ? routine.weeklyCount : undefined,
     );
     await updateStreak(routineId, newStreak);
 
@@ -150,8 +158,6 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
       get().fetchRoutines(),
       get().fetchCompletions(selectedDate),
     ]);
-    // fetchRoutines 내부에서 fetchWeekCompletions를 호출하지만,
-    // toggleCompletion 후 즉시 반영되도록 명시적으로 추가 호출
     await get().fetchWeekCompletions();
   },
 }));
