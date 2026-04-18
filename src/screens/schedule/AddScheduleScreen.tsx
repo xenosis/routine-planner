@@ -19,6 +19,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import * as Notifications from 'expo-notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import type { Schedule } from '../../db/scheduleDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
@@ -153,6 +154,7 @@ export default function AddScheduleScreen({
   onDelete,
 }: AddScheduleScreenProps): React.JSX.Element {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const isEditMode = Boolean(schedule);
 
   // 폼 상태
@@ -294,7 +296,7 @@ export default function AddScheduleScreen({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={[styles.root, { backgroundColor: theme.colors.background }]}
+        style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* 상단 헤더 */}

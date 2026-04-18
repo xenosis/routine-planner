@@ -188,6 +188,18 @@ export async function getTodayCompletedCount(today: string): Promise<number> {
 }
 
 /**
+ * 루틴 중 가장 이른 createdAt 날짜를 반환한다.
+ * 루틴이 없으면 today를 반환하여 마킹을 모두 건너뛰게 한다.
+ */
+export async function getEarliestRoutineCreatedAt(today: string): Promise<string> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ earliest: string }>(
+    'SELECT MIN(createdAt) as earliest FROM routines',
+  );
+  return row?.earliest ?? today;
+}
+
+/**
  * 전체 루틴 중 최대 스트릭 값을 반환한다.
  * routines 테이블의 streak 컬럼을 그대로 사용한다.
  */

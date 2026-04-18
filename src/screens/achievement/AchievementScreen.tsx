@@ -7,7 +7,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Surface, Text, useTheme, ProgressBar } from 'react-native-paper';
+import { SegmentedButtons, Surface, Text, useTheme, ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import { Calendar } from 'react-native-calendars';
@@ -21,6 +21,7 @@ import {
   getTodayCompletedCount,
   getMaxStreak,
   getTotalCompletionCount,
+  getEarliestRoutineCreatedAt,
   type RoutineAchievementRow,
   type DailyCompletionRow,
 } from '../../db/achievementDb';
@@ -84,6 +85,8 @@ interface AchievementData {
   weeklyChartData: { label: string; value: number; date: string }[];
   /** 루틴별 달성률 목록 */
   routineAchievements: RoutineAchievementRow[];
+  /** 가장 오래된 루틴 생성일 */
+  earliestRoutineDate: string;
 }
 
 // ─────────────────────────────────────────────
@@ -114,6 +117,7 @@ function useAchievementData() {
         totalCompletions,
         weeklyCompletions,
         routineAchievements,
+        earliestRoutineDate,
       ] = await Promise.all([
         getTodayCompletedCount(today),
         getTotalRoutineCount(),
@@ -121,6 +125,7 @@ function useAchievementData() {
         getTotalCompletionCount(),
         getDailyCompletions(weekStart, today),
         getRoutineAchievements(today),
+        getEarliestRoutineCreatedAt(today),
       ]);
 
       // 주간 달성률 계산
@@ -164,6 +169,7 @@ function useAchievementData() {
         totalCompletions,
         weeklyChartData,
         routineAchievements,
+        earliestRoutineDate,
       });
     } catch (e) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -192,6 +198,7 @@ function buildMarkedDates(
   today: string,
   totalRoutines: number,
   monthlyCompletions: DailyCompletionRow[],
+  earliestRoutineDate: string,
 ): MarkedDates {
   const monthCompletionMap = new Map<string, number>(
     monthlyCompletions.map((r) => [r.date, r.completedCount]),
@@ -207,6 +214,9 @@ function buildMarkedDates(
 
     // 미래 날짜는 마킹 제외
     if (dateKey > today) break;
+
+    // 루틴 추가 이전 날짜는 마킹 제외
+    if (dateKey < earliestRoutineDate) continue;
 
     const completed = monthCompletionMap.get(dateKey) ?? 0;
 
@@ -432,8 +442,8 @@ const WeeklyChart = React.memo(function WeeklyChart({
         barWidth={28}
         barBorderRadius={6}
         spacing={14}
-        // Y축 범위: 0 ~ 100%
-        maxValue={100}
+        // Y축 범위: 0 ~ 110% (100% 막대 상단 레이블 잘림 방지)
+        maxValue={110}
         noOfSections={4}
         // 격자선 스타일
         rulesColor={theme.colors.outlineVariant}
@@ -519,11 +529,13 @@ const chartStyles = StyleSheet.create({
 interface MonthlyCalendarProps {
   today: string;
   totalRoutines: number;
+  earliestRoutineDate: string;
 }
 
 const MonthlyCalendar = React.memo(function MonthlyCalendar({
   today,
   totalRoutines,
+  earliestRoutineDate,
 }: MonthlyCalendarProps): React.JSX.Element {
   const theme = useTheme();
   const [year, month] = today.split('-').map(Number);
@@ -537,11 +549,11 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
     let cancelled = false;
     getMonthlyCompletions(viewYear, viewMonth).then((completions) => {
       if (!cancelled) {
-        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, totalRoutines, completions));
+        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, totalRoutines, completions, earliestRoutineDate));
       }
     });
     return () => { cancelled = true; };
-  }, [viewYear, viewMonth, today, totalRoutines]);
+  }, [viewYear, viewMonth, today, totalRoutines, earliestRoutineDate]);
 
   return (
     <Surface
@@ -854,6 +866,7 @@ const listStyles = StyleSheet.create({
 export default function AchievementScreen(): React.JSX.Element {
   const theme = useTheme();
   const { data, loading, error } = useAchievementData();
+  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly' | 'routines'>('weekly');
 
   const today = useMemo(() => getTodayString(), []);
 
@@ -887,7 +900,7 @@ export default function AchievementScreen(): React.JSX.Element {
 
   // ── 정상 렌더링 ───────────────────────────────
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]} edges={['top', 'left', 'right']}>
 
       {/* 페이지 헤더 */}
       <View style={styles.header}>
@@ -899,29 +912,46 @@ export default function AchievementScreen(): React.JSX.Element {
         </Text>
       </View>
 
-      {/* 스크롤 가능한 콘텐츠 */}
+      {/* 요약 카드 (탭 전환과 무관하게 항상 표시) */}
+      <SummaryCards
+        todayCompleted={data.todayCompleted}
+        totalRoutines={data.totalRoutines}
+        weeklyRate={data.weeklyRate}
+        maxStreak={data.maxStreak}
+        totalCompletions={data.totalCompletions}
+      />
+
+      {/* 탭 버튼 */}
+      <SegmentedButtons
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as typeof activeTab)}
+        buttons={[
+          { value: 'weekly', label: '주간' },
+          { value: 'monthly', label: '월간' },
+          { value: 'routines', label: '루틴별' },
+        ]}
+        style={styles.tabButtons}
+      />
+
+      {/* 탭 콘텐츠 */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* 1. 요약 카드 */}
-        <SummaryCards
-          todayCompleted={data.todayCompleted}
-          totalRoutines={data.totalRoutines}
-          weeklyRate={data.weeklyRate}
-          maxStreak={data.maxStreak}
-          totalCompletions={data.totalCompletions}
-        />
-
-        {/* 2. 주간 달성률 막대 차트 */}
-        <WeeklyChart chartData={data.weeklyChartData} />
-
-        {/* 3. 월간 달성 캘린더 */}
-        <MonthlyCalendar today={today} totalRoutines={data.totalRoutines} />
-
-        {/* 4. 루틴별 달성률 목록 */}
-        <RoutineListSection achievements={data.routineAchievements} />
+        {activeTab === 'weekly' && (
+          <WeeklyChart chartData={data.weeklyChartData} />
+        )}
+        {activeTab === 'monthly' && (
+          <MonthlyCalendar
+            today={today}
+            totalRoutines={data.totalRoutines}
+            earliestRoutineDate={data.earliestRoutineDate}
+          />
+        )}
+        {activeTab === 'routines' && (
+          <RoutineListSection achievements={data.routineAchievements} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -949,6 +979,11 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 13,
     marginTop: 2,
+  },
+  // 탭 버튼
+  tabButtons: {
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.base,
   },
   // 스크롤 뷰
   scrollView: {
