@@ -13,12 +13,14 @@ import {
   Chip,
   Divider,
   IconButton,
+  Surface,
   Switch,
   Text,
   TextInput,
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { borderRadius, spacing } from '../../theme';
 import type { Todo } from '../../db/todoDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
@@ -91,6 +93,73 @@ function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
 
+// ─────────────────────────────────────────────
+// 시간 선택 컴포넌트 (시/분 위아래 버튼)
+// ─────────────────────────────────────────────
+
+interface TimePickerProps {
+  value: string;        // "HH:mm"
+  onChange: (time: string) => void;
+}
+
+function TimePicker({ value, onChange }: TimePickerProps): React.JSX.Element {
+  const theme = useTheme();
+  const parts = value.split(':');
+  const hour = parseInt(parts[0] ?? '09', 10) || 0;
+  const minute = parseInt(parts[1] ?? '00', 10) || 0;
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const changeHour = (delta: number) => onChange(`${pad((hour + delta + 24) % 24)}:${pad(minute)}`);
+  const changeMinute = (delta: number) => onChange(`${pad(hour)}:${pad((minute + delta + 60) % 60)}`);
+
+  return (
+    <Surface
+      style={[timePickerStyles.container, { backgroundColor: theme.colors.surfaceVariant }]}
+      elevation={0}
+    >
+      <MaterialCommunityIcons name="clock-outline" size={18} color={theme.colors.primary} />
+      <View style={timePickerStyles.unit}>
+        <TouchableOpacity onPress={() => changeHour(1)} hitSlop={8}>
+          <MaterialCommunityIcons name="chevron-up" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={[timePickerStyles.timeText, { color: theme.colors.onSurface }]}>{pad(hour)}</Text>
+        <TouchableOpacity onPress={() => changeHour(-1)} hitSlop={8}>
+          <MaterialCommunityIcons name="chevron-down" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+      </View>
+      <Text style={[timePickerStyles.colon, { color: theme.colors.onSurface }]}>:</Text>
+      <View style={timePickerStyles.unit}>
+        <TouchableOpacity onPress={() => changeMinute(5)} hitSlop={8}>
+          <MaterialCommunityIcons name="chevron-up" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+        <Text style={[timePickerStyles.timeText, { color: theme.colors.onSurface }]}>{pad(minute)}</Text>
+        <TouchableOpacity onPress={() => changeMinute(-5)} hitSlop={8}>
+          <MaterialCommunityIcons name="chevron-down" size={22} color={theme.colors.primary} />
+        </TouchableOpacity>
+      </View>
+      <Text style={[timePickerStyles.ampm, { color: theme.colors.onSurfaceVariant }]}>
+        {hour < 12 ? '오전' : '오후'}
+      </Text>
+    </Surface>
+  );
+}
+
+const timePickerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+    marginBottom: spacing.md,
+  },
+  unit: { alignItems: 'center', gap: 2, minWidth: 36 },
+  timeText: { fontSize: 26, fontWeight: '700', letterSpacing: 1, minWidth: 36, textAlign: 'center' },
+  colon: { fontSize: 24, fontWeight: '700', marginBottom: 2 },
+  ampm: { fontSize: 13, fontWeight: '600', marginLeft: 4, alignSelf: 'center' },
+});
+
 
 interface AddTodoScreenProps {
   visible: boolean;
@@ -114,7 +183,7 @@ export default function AddTodoScreen({
   // 폼 상태
   const [title, setTitle] = useState('');
   const [deadlineDate, setDeadlineDate] = useState(getTodayString());
-  const [deadlineTime, setDeadlineTime] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('09:00');
   const [category, setCategory] = useState<Todo['category']>('개인');
   const [memo, setMemo] = useState('');
   const [alarmEnabled, setAlarmEnabled] = useState(false);
@@ -143,7 +212,7 @@ export default function AddTodoScreen({
       // 추가 모드 초기화
       setTitle('');
       setDeadlineDate(getTodayString());
-      setDeadlineTime('');
+      setDeadlineTime('09:00');
       setCategory('개인');
       setMemo('');
       setAlarmEnabled(false);
@@ -280,35 +349,29 @@ export default function AddTodoScreen({
             autoFocus={!isEditMode}
           />
 
-          {/* 마감 날짜 + 시각 — 한 줄 배치 */}
-          <View style={styles.dateTimeRow}>
-            <TextInput
-              label="마감 날짜"
-              value={deadlineDate}
-              onChangeText={setDeadlineDate}
-              mode="outlined"
-              style={styles.dateInput}
-              placeholder="YYYY-MM-DD"
-              keyboardType="numeric"
-              maxLength={10}
-              right={
-                <TextInput.Icon
-                  icon={showDatePicker ? 'calendar-check' : 'calendar'}
-                  onPress={() => setShowDatePicker((v) => !v)}
-                />
-              }
-            />
-            <TextInput
-              label="시각"
-              value={deadlineTime}
-              onChangeText={setDeadlineTime}
-              mode="outlined"
-              style={styles.timeInput}
-              placeholder="HH:mm"
-              keyboardType="numeric"
-              maxLength={5}
-            />
-          </View>
+          {/* 마감 날짜 */}
+          <TextInput
+            label="마감 날짜"
+            value={deadlineDate}
+            onChangeText={setDeadlineDate}
+            mode="outlined"
+            style={styles.input}
+            placeholder="YYYY-MM-DD"
+            keyboardType="numeric"
+            maxLength={10}
+            right={
+              <TextInput.Icon
+                icon={showDatePicker ? 'calendar-check' : 'calendar'}
+                onPress={() => setShowDatePicker((v) => !v)}
+              />
+            }
+          />
+
+          {/* 마감 시각 — TimePicker */}
+          <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
+            마감 시각
+          </Text>
+          <TimePicker value={deadlineTime} onChange={setDeadlineTime} />
 
           {/* 인라인 날짜 선택 달력 */}
           {showDatePicker && (
@@ -691,21 +754,14 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: spacing.sm,
   },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: spacing.xs,
+    letterSpacing: 0.3,
+  },
   memoInput: {
     minHeight: 90,
-  },
-  // 날짜 + 시각 한 줄
-  dateTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-    gap: spacing.xs,
-  },
-  dateInput: {
-    flex: 2.4,
-  },
-  timeInput: {
-    flex: 1.3,
   },
   // 인라인 날짜 달력
   inlineDatePicker: {

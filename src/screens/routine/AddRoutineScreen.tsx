@@ -21,6 +21,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import type { Routine } from '../../db/routineDb';
 
@@ -248,12 +249,16 @@ export default function AddRoutineScreen({
   onDelete,
 }: AddRoutineScreenProps): React.JSX.Element {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const isEditMode = Boolean(routine);
 
   // 폼 상태
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState<Routine['category']>('운동');
   const [frequency, setFrequency] = useState<Routine['frequency']>('daily');
+
+  // UI 상태
+  const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [weeklyCount, setWeeklyCount] = useState<number>(3);
   const [alarmEnabled, setAlarmEnabled] = useState(false);
@@ -279,6 +284,7 @@ export default function AddRoutineScreen({
       setAlarmEnabled(false);
       setAlarmTime('07:00');
     }
+    setShowCategoryMenu(false);
   }, [routine, visible]);
 
   // 요일 버튼 토글 핸들러
@@ -339,7 +345,7 @@ export default function AddRoutineScreen({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        style={[styles.root, { backgroundColor: theme.colors.background }]}
+        style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* 상단 헤더 */}
@@ -383,16 +389,49 @@ export default function AddRoutineScreen({
             autoFocus={!isEditMode}
           />
 
-          {/* 2. 카테고리 */}
-          <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-            카테고리
-          </Text>
-          <SegmentedButtons
-            value={category}
-            onValueChange={(val) => setCategory(val as Routine['category'])}
-            buttons={CATEGORY_OPTIONS}
-            style={styles.segmented}
-          />
+          {/* 2. 카테고리 — 드롭다운 */}
+          <View style={[styles.categoryWrapper, showCategoryMenu && { zIndex: 10 }]}>
+            <View pointerEvents="none">
+              <TextInput
+                label="카테고리"
+                value={category}
+                mode="outlined"
+                editable={false}
+                style={styles.input}
+                left={
+                  <TextInput.Icon
+                    icon={() => (
+                      <View style={[styles.categoryDot, { backgroundColor: ROUTINE_CATEGORY_COLORS[category] }]} />
+                    )}
+                  />
+                }
+                right={<TextInput.Icon icon={showCategoryMenu ? 'chevron-up' : 'chevron-down'} />}
+              />
+            </View>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={() => setShowCategoryMenu((v) => !v)}
+              activeOpacity={0.8}
+            />
+            {showCategoryMenu && (
+              <View style={[styles.categoryDropdown, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
+                {CATEGORY_OPTIONS.map((opt) => (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.categoryOption,
+                      opt.value === category && { backgroundColor: theme.colors.primaryContainer },
+                    ]}
+                    onPress={() => { setCategory(opt.value); setShowCategoryMenu(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.categoryDot, { backgroundColor: ROUTINE_CATEGORY_COLORS[opt.value] }]} />
+                    <Text style={{ color: theme.colors.onSurface }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
 
           {/* 3. 반복 주기 */}
           <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
@@ -641,6 +680,33 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: spacing.md,
+  },
+  categoryWrapper: {
+    marginBottom: spacing.md,
+    position: 'relative',
+  },
+  categoryDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    zIndex: 999,
+    elevation: 4,
+    overflow: 'hidden',
+  },
+  categoryOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  categoryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   sectionLabel: {
     fontSize: 12,
