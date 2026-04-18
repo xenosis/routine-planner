@@ -27,7 +27,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-04-18 기준, 할일 탭 추가 완료)
+## 현재 구현 상태 (2026-04-18 기준, 성과 탭 3탭 개선 + 앱 이름 Doro 확정)
 
 ### 파일 구조
 ```
@@ -36,7 +36,7 @@ src/
     database.ts        - DB 초기화 (SQLite 싱글톤, 테이블 생성, 마이그레이션)
     scheduleDb.ts      - 일정 CRUD (Schedule 타입 포함)
     routineDb.ts       - 루틴 CRUD (Routine 타입, 스트릭, 주간 완료 조회)
-    achievementDb.ts   - 달성률 조회 (frequency/weekdays 반영)
+    achievementDb.ts   - 달성률 조회 (frequency/weekdays 반영, getEarliestRoutineCreatedAt 포함)
     todoDb.ts          - 할일 CRUD (Todo 타입 포함)
   store/
     scheduleStore.ts   - 일정 Zustand 스토어
@@ -53,7 +53,7 @@ src/
       TodoScreen.tsx         - 할일 화면 (진행중/완료 탭, 날짜 구분자, FAB)
       AddTodoScreen.tsx      - 할일 추가/수정 모달 (하단 삭제/저장 분리 버튼)
     achievement/
-      AchievementScreen.tsx  - 달성률 화면
+      AchievementScreen.tsx  - 성과 화면 (3탭: 주간/월간/루틴별, 요약 카드 고정)
   components/
     calendar/
       MonthCalendar.tsx      - 자체 구현 월 달력 컴포넌트
@@ -360,3 +360,28 @@ toggleCompleted(id)            // 완료 토글 + 알람 처리 + fetchTodos
 - 투명 `TouchableOpacity` 오버레이로 터치 가로채기
 - 절대위치 드롭다운 (`zIndex: 10`, `elevation: 4`)
 - 각 옵션에 색상 dot + 텍스트
+
+---
+
+### 성과 화면 (AchievementScreen) 구조
+
+- **요약 카드 (SummaryCards)**: 탭 전환과 무관하게 항상 상단 고정
+  - 오늘 완료 / 주간 달성률 / 최고 스트릭 / 누적 완료 횟수
+- **SegmentedButtons 탭**: `[주간 | 월간 | 루틴별]`
+- **주간 탭 (WeeklyChart)**: 최근 7일 달성률 BarChart (maxValue=110, 100% 잘림 방지)
+- **월간 탭 (MonthlyCalendar)**: react-native-calendars Calendar
+  - `earliestRoutineDate` 기준 이전 날짜 dot 마킹 제외 (루틴 추가 전 빨간 dot 방지)
+  - dot 색상: 전체완료 `#10B981` / 일부완료 `#F59E0B` / 미완료 `#EF4444`
+- **루틴별 탭 (RoutineListSection)**: 루틴별 달성률 ProgressBar + 스트릭 뱃지
+
+#### achievementDb 주요 함수
+- `getEarliestRoutineCreatedAt(today)`: 가장 오래된 루틴의 createdAt 반환 (없으면 today)
+- `getRoutineAchievements(today)`: frequency별 totalDays 계산 (daily=경과일, weekly_days=예정횟수)
+
+---
+
+### 앱 정보
+- **앱 이름**: Doro
+- **패키지**: com.sewoong.routineplanner
+- **아이콘**: 인디고-퍼플 그라디언트 배경 + 순환 화살표 + 체크마크 (흰색)
+- **스플래시 배경**: `#6366F1`
