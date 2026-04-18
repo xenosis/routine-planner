@@ -64,6 +64,27 @@ export async function initDatabase(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_completions_date ON routine_completions(date);
     -- 루틴별 완료 기록 조회 성능을 위한 인덱스 (스트릭 계산 시 사용)
     CREATE INDEX IF NOT EXISTS idx_completions_routine ON routine_completions(routineId);
+
+    -- 할일(Todo) 테이블
+    CREATE TABLE IF NOT EXISTS todos (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      deadlineDate TEXT NOT NULL,
+      deadlineTime TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '기타',
+      color TEXT NOT NULL DEFAULT '#6366F1',
+      memo TEXT,
+      alarm INTEGER NOT NULL DEFAULT 0,
+      alarmTimes TEXT,
+      completed INTEGER NOT NULL DEFAULT 0,
+      completedAt TEXT,
+      createdAt TEXT NOT NULL
+    );
+
+    -- 마감일·시간 기준 정렬 조회 성능을 위한 인덱스
+    CREATE INDEX IF NOT EXISTS idx_todos_deadline ON todos(deadlineDate, deadlineTime);
+    -- 완료 여부 필터링 성능을 위한 인덱스
+    CREATE INDEX IF NOT EXISTS idx_todos_completed ON todos(completed);
   `);
 
   // alarmTimes 컬럼 마이그레이션

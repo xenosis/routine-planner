@@ -8,10 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScheduleScreen from '../screens/schedule/ScheduleScreen';
 import RoutineScreen from '../screens/routine/RoutineScreen';
 import AchievementScreen from '../screens/achievement/AchievementScreen';
+import TodoScreen from '../screens/todo/TodoScreen';
 
 export type RootTabParamList = {
   Schedule: undefined;
   Routine: undefined;
+  Todo: undefined;
   Achievement: undefined;
 };
 
@@ -22,12 +24,14 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 const TAB_ICONS: Record<keyof RootTabParamList, { focused: IconName; unfocused: IconName }> = {
   Schedule: { focused: 'calendar-month', unfocused: 'calendar-month-outline' },
   Routine: { focused: 'repeat', unfocused: 'repeat' },
+  Todo: { focused: 'checkbox-marked-circle', unfocused: 'checkbox-marked-circle-outline' },
   Achievement: { focused: 'chart-bar', unfocused: 'chart-bar' },
 };
 
 const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   Schedule: '일정',
   Routine: '루틴',
+  Todo: '할일',
   Achievement: '성과',
 };
 
@@ -74,6 +78,7 @@ export default function AppNavigator(): React.JSX.Element {
     >
       <Tab.Screen name="Schedule" component={ScheduleScreen} />
       <Tab.Screen name="Routine" component={RoutineScreen} />
+      <Tab.Screen name="Todo" component={TodoScreen} />
       <Tab.Screen name="Achievement" component={AchievementScreen} />
     </Tab.Navigator>
   );
