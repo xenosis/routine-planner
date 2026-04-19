@@ -282,29 +282,32 @@ export default function AddTodoScreen({
             autoFocus={!isEditMode}
           />
 
-          {/* 마감 날짜 */}
-          <TextInput
-            label="마감 날짜"
-            value={deadlineDate}
-            onChangeText={setDeadlineDate}
-            mode="outlined"
-            style={styles.input}
-            placeholder="YYYY-MM-DD"
-            keyboardType="numeric"
-            maxLength={10}
-            right={
-              <TextInput.Icon
-                icon={showDatePicker ? 'calendar-check' : 'calendar'}
-                onPress={() => setShowDatePicker((v) => !v)}
-              />
-            }
-          />
-
-          {/* 마감 시각 */}
-          <Text style={[styles.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-            마감 시각
-          </Text>
-          <TimeInput value={deadlineTime} onChange={setDeadlineTime} icon="clock-outline" />
+          {/* 마감 날짜 + 시각 — 한 줄 배치 */}
+          <View style={styles.deadlineRow}>
+            <TextInput
+              label="마감 날짜"
+              value={deadlineDate}
+              onChangeText={setDeadlineDate}
+              mode="outlined"
+              style={styles.deadlineDateInput}
+              placeholder="YYYY-MM-DD"
+              keyboardType="numeric"
+              maxLength={10}
+              right={
+                <TextInput.Icon
+                  icon={showDatePicker ? 'calendar-check' : 'calendar'}
+                  onPress={() => setShowDatePicker((v) => !v)}
+                />
+              }
+            />
+            <TimeInput
+              value={deadlineTime}
+              onChange={setDeadlineTime}
+              compact
+              label="마감 시각"
+              style={styles.deadlineTimeInput}
+            />
+          </View>
 
           {/* 인라인 날짜 선택 달력 */}
           {showDatePicker && (
@@ -686,6 +689,18 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: spacing.sm,
+  },
+  deadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  deadlineDateInput: {
+    flex: 1.6,
+  },
+  deadlineTimeInput: {
+    flex: 1,
   },
   sectionLabel: {
     fontSize: 12,

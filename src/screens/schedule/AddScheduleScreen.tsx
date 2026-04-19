@@ -256,8 +256,11 @@ export default function AddScheduleScreen({
   }, []);
 
   // 저장 처리
+  const isTimeValid = endTime >= startTime;
+
   const handleSave = useCallback(async () => {
-    if (!title.trim()) return; // 제목 필수
+    if (!title.trim()) return;
+    if (endTime < startTime) return;
 
     // alarm 필드: 알람 활성화 AND 알람이 하나 이상 등록된 경우만 true
     const hasAlarm = alarmEnabled && alarmTimes.length > 0;
@@ -288,7 +291,7 @@ export default function AddScheduleScreen({
     location, participants, memo, alarmEnabled, alarmTimes, schedule, onSave,
   ]);
 
-  const isSaveDisabled = !title.trim();
+  const isSaveDisabled = !title.trim() || !isTimeValid;
 
   return (
     <Modal
@@ -377,6 +380,11 @@ export default function AddScheduleScreen({
               style={styles.timeInput}
             />
           </View>
+          {!isTimeValid && (
+            <Text style={[styles.timeError, { color: theme.colors.error }]}>
+              종료 시간은 시작 시간보다 늦어야 합니다
+            </Text>
+          )}
 
           {/* 인라인 날짜 선택 달력 */}
           {showDatePicker && (
@@ -751,6 +759,11 @@ const styles = StyleSheet.create({
   },
   timeInput: {
     flex: 1.3,
+  },
+  timeError: {
+    fontSize: 12,
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
   },
   timeSeparator: {
     fontSize: 15,
