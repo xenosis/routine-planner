@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from 'react-native-paper';
-import { Platform } from 'react-native';
+import { ActivityIndicator, useTheme } from 'react-native-paper';
+import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScheduleScreen from '../screens/schedule/ScheduleScreen';
 import RoutineScreen from '../screens/routine/RoutineScreen';
 import AchievementScreen from '../screens/achievement/AchievementScreen';
 import TodoScreen from '../screens/todo/TodoScreen';
+import LoginScreen from '../screens/auth/LoginScreen';
+import { useAuthStore } from '../store/authStore';
 
 export type RootTabParamList = {
   Schedule: undefined;
@@ -38,6 +40,23 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
 export default function AppNavigator(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { session, loading, initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (!session) {
+    return <LoginScreen />;
+  }
 
   // 시스템 네비게이션 바 높이 + 기본 패딩
   const tabBarHeight = 56 + insets.bottom;

@@ -86,6 +86,7 @@ export default function ScheduleScreen(): React.JSX.Element {
     setSelectedDate, clearSelectedDate,
     fetchByDate, fetchByMonth, fetchMarkedDates,
     addSchedule, updateSchedule, deleteSchedule,
+    setupRealtimeSubscription,
   } = useScheduleStore();
 
   const [modalVisible, setModalVisible] = React.useState(false);
@@ -94,7 +95,7 @@ export default function ScheduleScreen(): React.JSX.Element {
   /** 월 전체 보기용 FlatList ref (자동 스크롤에 사용) */
   const monthListRef = useRef<FlatList<ListItem>>(null);
 
-  // 앱 초기화: DB 준비 후 오늘 날짜 로드
+  // 초기 데이터 로드
   useEffect(() => {
     async function init() {
       await initDatabase();
@@ -105,6 +106,12 @@ export default function ScheduleScreen(): React.JSX.Element {
     }
     init();
   }, []);
+
+  // 실시간 구독: 상대방이 일정을 변경하면 자동 갱신
+  useEffect(() => {
+    const channel = setupRealtimeSubscription();
+    return () => { channel.unsubscribe(); };
+  }, [setupRealtimeSubscription]);
 
   // ── 달력 이벤트 핸들러 ───────────────────
 

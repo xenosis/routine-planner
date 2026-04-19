@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import {
   getSchedulesByDate,
   getSchedulesByMonth,
@@ -76,6 +78,9 @@ interface ScheduleState {
 
   /** 일정을 삭제하고 현재 뷰를 갱신한다. */
   deleteSchedule: (id: string) => Promise<void>;
+
+  /** Supabase 실시간 구독을 시작한다. 반환된 채널로 구독 해제 가능. */
+  setupRealtimeSubscription: () => RealtimeChannel;
 }
 
 // ─────────────────────────────────────────────
@@ -196,5 +201,28 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const dateToRefresh = target?.date ?? selectedDate ?? `${viewYear}-${String(viewMonth).padStart(2, '0')}-01`;
     const { year, month } = parseYearMonth(dateToRefresh);
     await get().fetchMarkedDates(year, month);
+  },
+
+  // ── 실시간 구독 ──────────────────────────────
+
+  setupRealtimeSubscription: () => {
+    const channel = supabase
+      .channel('schedules_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'schedules' },
+        () => {
+          // 상대방이 일정을 추가/수정/삭제하면 현재 뷰를 자동 갱신
+          const { selectedDate, viewYear, viewMonth } = get();
+          if (selectedDate !== null) {
+            get().fetchByDate(selectedDate).catch(() => {});
+          } else {
+            get().fetchByMonth(viewYear, viewMonth).catch(() => {});
+          }
+          get().fetchMarkedDates(viewYear, viewMonth).catch(() => {});
+        },
+      )
+      .subscribe();
+    return channel;
   },
 }));
