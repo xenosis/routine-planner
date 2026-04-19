@@ -23,6 +23,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
+import TimeInput from '../../components/common/TimeInput';
 import type { Routine } from '../../db/routineDb';
 
 // 카테고리별 대표 색상
@@ -138,108 +139,6 @@ async function scheduleRoutineAlarm(routine: Routine): Promise<void> {
     console.warn('루틴 알람 예약 실패:', e);
   }
 }
-
-// ─────────────────────────────────────────────
-// 시간 선택 컴포넌트 (시 / 분 +/- 버튼)
-// ─────────────────────────────────────────────
-
-interface TimePickerProps {
-  value: string;           // "HH:mm"
-  onChange: (time: string) => void;
-}
-
-function TimePicker({ value, onChange }: TimePickerProps): React.JSX.Element {
-  const theme = useTheme();
-  const [hour, minute] = value.split(':').map(Number);
-
-  const pad = (n: number) => String(n).padStart(2, '0');
-
-  const changeHour = (delta: number) => {
-    const next = (hour + delta + 24) % 24;
-    onChange(`${pad(next)}:${pad(minute)}`);
-  };
-  const changeMinute = (delta: number) => {
-    const next = (minute + delta + 60) % 60;
-    onChange(`${pad(hour)}:${pad(next)}`);
-  };
-
-  const btnColor = theme.colors.primary;
-  const textColor = theme.colors.onSurface;
-  const surfaceColor = theme.colors.surfaceVariant;
-
-  return (
-    <Surface
-      style={[timePickerStyles.container, { backgroundColor: surfaceColor }]}
-      elevation={0}
-    >
-      <MaterialCommunityIcons name="bell-outline" size={18} color={btnColor} />
-
-      {/* 시(Hour) */}
-      <View style={timePickerStyles.unit}>
-        <TouchableOpacity onPress={() => changeHour(1)} hitSlop={8}>
-          <MaterialCommunityIcons name="chevron-up" size={22} color={btnColor} />
-        </TouchableOpacity>
-        <Text style={[timePickerStyles.timeText, { color: textColor }]}>{pad(hour)}</Text>
-        <TouchableOpacity onPress={() => changeHour(-1)} hitSlop={8}>
-          <MaterialCommunityIcons name="chevron-down" size={22} color={btnColor} />
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[timePickerStyles.colon, { color: textColor }]}>:</Text>
-
-      {/* 분(Minute) */}
-      <View style={timePickerStyles.unit}>
-        <TouchableOpacity onPress={() => changeMinute(5)} hitSlop={8}>
-          <MaterialCommunityIcons name="chevron-up" size={22} color={btnColor} />
-        </TouchableOpacity>
-        <Text style={[timePickerStyles.timeText, { color: textColor }]}>{pad(minute)}</Text>
-        <TouchableOpacity onPress={() => changeMinute(-5)} hitSlop={8}>
-          <MaterialCommunityIcons name="chevron-down" size={22} color={btnColor} />
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[timePickerStyles.ampm, { color: theme.colors.onSurfaceVariant }]}>
-        {hour < 12 ? '오전' : '오후'}
-      </Text>
-    </Surface>
-  );
-}
-
-const timePickerStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    gap: 8,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  unit: {
-    alignItems: 'center',
-    gap: 2,
-    minWidth: 36,
-  },
-  timeText: {
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: 1,
-    minWidth: 36,
-    textAlign: 'center',
-  },
-  colon: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  ampm: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginLeft: 4,
-    alignSelf: 'center',
-  },
-});
 
 export default function AddRoutineScreen({
   visible,
@@ -560,7 +459,7 @@ export default function AddRoutineScreen({
 
           {/* 알람 시간 선택 (알람 켰을 때만 표시) */}
           {alarmEnabled && (
-            <TimePicker value={alarmTime} onChange={setAlarmTime} />
+            <TimeInput value={alarmTime} onChange={setAlarmTime} icon="bell-outline" />
           )}
 
           {/* 알람 요일 선택 (weekly_count + 알람 ON 시에만 표시) */}

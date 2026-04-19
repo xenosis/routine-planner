@@ -18,6 +18,7 @@ import {
   TextInput,
   useTheme,
 } from 'react-native-paper';
+import TimeInput from '../../components/common/TimeInput';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
@@ -358,28 +359,22 @@ export default function AddScheduleScreen({
                 />
               }
             />
-            <TextInput
+            <TimeInput
               label="시작"
               value={startTime}
-              onChangeText={setStartTime}
-              mode="outlined"
+              onChange={setStartTime}
+              compact
               style={styles.timeInput}
-              placeholder="HH:mm"
-              keyboardType="numeric"
-              maxLength={5}
             />
             <Text style={[styles.timeSeparator, { color: theme.colors.onSurfaceVariant }]}>
               ~
             </Text>
-            <TextInput
+            <TimeInput
               label="종료"
               value={endTime}
-              onChangeText={setEndTime}
-              mode="outlined"
+              onChange={setEndTime}
+              compact
               style={styles.timeInput}
-              placeholder="HH:mm"
-              keyboardType="numeric"
-              maxLength={5}
             />
           </View>
 
