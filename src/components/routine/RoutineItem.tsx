@@ -147,7 +147,7 @@ export default function RoutineItem({
             {/* 스트릭 (1일 이상일 때만) */}
             {routine.streak > 0 && (
               <Text style={[styles.metaBadge, { color: theme.colors.onSurfaceVariant }]}>
-                {'  🔥 '}{routine.streak}일
+                {'  🔥 '}{routine.streak}{routine.frequency === 'weekly_count' ? '주' : '일'}
               </Text>
             )}
 

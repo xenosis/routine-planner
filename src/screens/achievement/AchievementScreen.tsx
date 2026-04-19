@@ -19,7 +19,6 @@ import {
   getRoutineAchievements,
   getTotalRoutineCount,
   getTodayCompletedCount,
-  getMaxStreak,
   getTotalCompletionCount,
   getEarliestRoutineCreatedAt,
   type RoutineAchievementRow,
@@ -79,6 +78,8 @@ interface AchievementData {
   weeklyRate: number;
   /** 최고 스트릭 */
   maxStreak: number;
+  /** 최고 스트릭 단위 ('일' | '주') */
+  maxStreakUnit: string;
   /** 누적 완료 횟수 */
   totalCompletions: number;
   /** 주간 차트 데이터 (7일) */
@@ -113,7 +114,6 @@ function useAchievementData() {
       const [
         todayCompleted,
         totalRoutines,
-        maxStreak,
         totalCompletions,
         weeklyCompletions,
         routineAchievements,
@@ -121,12 +121,19 @@ function useAchievementData() {
       ] = await Promise.all([
         getTodayCompletedCount(today),
         getTotalRoutineCount(),
-        getMaxStreak(),
         getTotalCompletionCount(),
         getDailyCompletions(weekStart, today),
         getRoutineAchievements(today),
         getEarliestRoutineCreatedAt(today),
       ]);
+
+      // routineAchievements에서 최고 스트릭 루틴 도출 (단위 포함)
+      const maxStreakRoutine = routineAchievements.reduce<typeof routineAchievements[number] | null>(
+        (best, r) => (r.streak > (best?.streak ?? -1) ? r : best),
+        null,
+      );
+      const maxStreak = maxStreakRoutine?.streak ?? 0;
+      const maxStreakUnit = maxStreakRoutine?.frequency === 'weekly_count' ? '주' : '일';
 
       // 주간 달성률 계산
       const completionMap = new Map<string, number>(
@@ -144,19 +151,16 @@ function useAchievementData() {
         };
       });
 
-      // 이번 주 달성률 평균: 루틴이 존재하는 경우만 계산 (루틴이 없는 날 제외)
-      // 루틴이 0개면 0%, 있으면 완료된 날의 달성률 평균
+      // 주간 달성률: 루틴 등록일(earliestRoutineDate) ~ 오늘 구간만 분모에 포함
+      // 루틴 등록 이전 날은 제외, 등록 후 안 한 날은 0%로 포함
       let weeklyRate = 0;
       if (totalRoutines > 0) {
-        // 오늘 이전이거나 오늘인 날 중, 완료 기록이 있거나 오늘인 날만 유효 날짜로 간주
-        // 실용적 접근: 현재 루틴 수 기준으로 7일 평균 (루틴이 추가되기 전 날은 0%로 포함하지 않음)
-        // → completionMap에 기록이 있는 날 + 오늘(루틴 추가 후 첫날 고려)만 평균
-        const daysWithActivity = weeklyChartData.filter(
-          (d) => completionMap.has(d.date) || d.date === today,
+        const validDays = weeklyChartData.filter(
+          (d) => d.date >= earliestRoutineDate && d.date <= today,
         );
-        if (daysWithActivity.length > 0) {
+        if (validDays.length > 0) {
           weeklyRate = Math.round(
-            daysWithActivity.reduce((sum, d) => sum + d.value, 0) / daysWithActivity.length,
+            validDays.reduce((sum, d) => sum + d.value, 0) / validDays.length,
           );
         }
       }
@@ -166,6 +170,7 @@ function useAchievementData() {
         totalRoutines,
         weeklyRate,
         maxStreak,
+        maxStreakUnit,
         totalCompletions,
         weeklyChartData,
         routineAchievements,
@@ -248,6 +253,7 @@ interface SummaryCardsProps {
   totalRoutines: number;
   weeklyRate: number;
   maxStreak: number;
+  maxStreakUnit: string;
   totalCompletions: number;
 }
 
@@ -256,6 +262,7 @@ const SummaryCards = React.memo(function SummaryCards({
   totalRoutines,
   weeklyRate,
   maxStreak,
+  maxStreakUnit,
   totalCompletions,
 }: SummaryCardsProps): React.JSX.Element {
   const theme = useTheme();
@@ -316,7 +323,7 @@ const SummaryCards = React.memo(function SummaryCards({
           />
           <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
             {maxStreak}
-            <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>일</Text>
+            <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>{maxStreakUnit}</Text>
           </Text>
           <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
             최고 스트릭
@@ -707,7 +714,7 @@ const RoutineAchievementItem = React.memo(function RoutineAchievementItem({
         {item.streak > 0 && (
           <View style={itemStyles.streakBadge}>
             <MaterialCommunityIcons name="fire" size={12} color="#F59E0B" />
-            <Text style={[itemStyles.streakText, { color: '#F59E0B' }]}>{item.streak}일</Text>
+            <Text style={[itemStyles.streakText, { color: '#F59E0B' }]}>{item.streak}{item.frequency === 'weekly_count' ? '주' : '일'}</Text>
           </View>
         )}
         <Text style={[itemStyles.rateText, { color: theme.colors.onSurfaceVariant }]}>
@@ -918,6 +925,7 @@ export default function AchievementScreen(): React.JSX.Element {
         totalRoutines={data.totalRoutines}
         weeklyRate={data.weeklyRate}
         maxStreak={data.maxStreak}
+        maxStreakUnit={data.maxStreakUnit}
         totalCompletions={data.totalCompletions}
       />
 

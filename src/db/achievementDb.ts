@@ -68,10 +68,11 @@ export interface RoutineAchievementRow {
   routineId: string;
   title: string;
   color: string;
+  frequency: 'daily' | 'weekly_days' | 'weekly_count';
   completedDays: number;
   totalDays: number;
   rate: number; // 0.0 ~ 1.0
-  streak: number; // 현재 연속 달성 일수
+  streak: number;
 }
 
 /**
@@ -145,6 +146,7 @@ export async function getRoutineAchievements(
       routineId: row.routineId,
       title: row.title,
       color: row.color,
+      frequency: (row.frequency ?? 'daily') as RoutineAchievementRow['frequency'],
       completedDays,
       totalDays,
       rate,
