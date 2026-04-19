@@ -4,6 +4,7 @@ import { Surface, Text, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { borderRadius, spacing } from '../../theme';
 import type { Routine } from '../../db/routineDb';
+import { toLocalDateStr } from '../../utils/date';
 
 // '매일' 또는 '주 N회 · 월수금' 형태의 빈도 라벨 반환
 const DAY_LABELS: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금', 6: '토', 0: '일' };
@@ -41,7 +42,7 @@ function getWeekDates(): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() - daysFromMonday + i);
-    return d.toISOString().split('T')[0];
+    return toLocalDateStr(d);
   });
 }
 

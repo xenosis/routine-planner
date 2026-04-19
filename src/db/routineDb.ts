@@ -1,4 +1,5 @@
 import { getDb } from './database';
+import { toLocalDateStr } from '../utils/date';
 
 // ─────────────────────────────────────────────
 // 타입 정의
@@ -249,7 +250,7 @@ export async function calculateStreak(
 
   // 완료 날짜를 Set으로 변환하여 O(1) 조회 가능하게 한다
   const completedDates = new Set(rows.map((r) => r.date));
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr();
 
   if (weeklyCount && weeklyCount > 0) {
     // weekly_count: 주 단위 역산 — 연속으로 quota를 달성한 주 수를 반환
@@ -287,7 +288,7 @@ export async function calculateStreak(
   if (weekdays && weekdays.length > 0) {
     // weekly_days: 예정된 날짜만 역산하며 스트릭 계산
     // 오늘이 예정일인지 확인
-    const todayJsDay = new Date().getUTCDay();
+    const todayJsDay = new Date().getDay();
     const todayIsScheduled = weekdays.includes(todayJsDay);
     const startDate = (todayIsScheduled && completedDates.has(today))
       ? today

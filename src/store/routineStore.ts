@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import * as Notifications from 'expo-notifications';
+import { toLocalDateStr } from '../utils/date';
 import {
   getAllRoutines,
   getCompletedIds,
@@ -64,8 +65,7 @@ interface RoutineState {
 export const useRoutineStore = create<RoutineState>((set, get) => ({
   routines: [],
   completedIds: [],
-  // 오늘 날짜를 기본 선택값으로 설정 (KST 기준 YYYY-MM-DD)
-  selectedDate: new Date().toISOString().split('T')[0],
+  selectedDate: toLocalDateStr(),
   weekCompletions: {},
 
   // ── 조회 ────────────────────────────────────
@@ -83,16 +83,16 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
   },
 
   fetchWeekCompletions: async () => {
-    // 이번 주 월요일(weekStart) ~ 일요일(weekEnd) 계산
+    // 이번 주 월요일(weekStart) ~ 일요일(weekEnd) 계산 (로컬 시간대 기준)
     const today = new Date();
-    const dayOfWeek = today.getUTCDay(); // 0=일
+    const dayOfWeek = today.getDay(); // 로컬 기준 0=일
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const monday = new Date(today);
-    monday.setUTCDate(today.getUTCDate() - daysFromMonday);
+    monday.setDate(today.getDate() - daysFromMonday);
     const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setDate(monday.getDate() + 6);
 
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const fmt = (d: Date) => toLocalDateStr(d);
     const result = await getWeekCompletions(fmt(monday), fmt(sunday));
     set({ weekCompletions: result });
   },
