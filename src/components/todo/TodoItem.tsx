@@ -12,42 +12,36 @@ interface TodoItemProps {
   onToggleComplete: (todo: Todo) => void;
 }
 
-// ─────────────────────────────────────────────
-// D-day 계산 헬퍼
-// ─────────────────────────────────────────────
-
 interface DdayInfo {
   label: string;
-  isUrgent: boolean; // 마감 3일 이내 또는 초과 여부
+  diffDays: number;
 }
 
 function calcDday(deadlineDate: string): DdayInfo {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const [y, m, d] = deadlineDate.split('-').map(Number);
   const deadline = new Date(y, m - 1, d);
   deadline.setHours(0, 0, 0, 0);
-
   const diffMs = deadline.getTime() - today.getTime();
   const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
 
   let label: string;
-  if (diffDays === 0) {
-    label = '오늘';
-  } else if (diffDays === 1) {
-    label = '내일';
-  } else if (diffDays > 1) {
-    label = `D-${diffDays}`;
-  } else {
-    // 마감 초과
-    label = `D+${Math.abs(diffDays)}`;
-  }
+  if (diffDays === 0) label = '오늘';
+  else if (diffDays === 1) label = '내일';
+  else if (diffDays > 1) label = `D-${diffDays}`;
+  else label = `D+${Math.abs(diffDays)}`;
 
-  // 마감 3일 이내(0~3일 남음) 또는 초과(음수)
-  const isUrgent = diffDays <= 3;
+  return { label, diffDays };
+}
 
-  return { label, isUrgent };
+function getUrgencyColor(diffDays: number, fallback: string): string {
+  if (diffDays < 0) return '#EF4444';
+  if (diffDays === 0) return '#EF4444';
+  if (diffDays <= 2) return '#F97316';
+  if (diffDays <= 5) return '#F59E0B';
+  if (diffDays <= 7) return '#EAB308';
+  return fallback;
 }
 
 export default function TodoItem({
@@ -58,27 +52,21 @@ export default function TodoItem({
 }: TodoItemProps): React.JSX.Element {
   const theme = useTheme();
 
-  // D-day 계산 (마감일 기반)
   const ddayInfo = useMemo(() => calcDday(todo.deadlineDate), [todo.deadlineDate]);
+  const urgencyColor = getUrgencyColor(ddayInfo.diffDays, theme.colors.onSurfaceVariant);
+  const isOverdue = ddayInfo.diffDays < 0;
 
-  // 완료 상태이면 카드 전체를 흐리게 처리
-  const cardOpacity = todo.completed ? 0.5 : 1;
-
-  // D-day 텍스트 색상: 긴급(3일 이내/초과) → error, 그 외 → onSurfaceVariant
-  const ddayColor = ddayInfo.isUrgent
-    ? theme.colors.error
-    : theme.colors.onSurfaceVariant;
+  const cardBg = !todo.completed && isOverdue
+    ? (theme.dark ? '#3D1515' : '#FEF2F2')
+    : theme.colors.surface;
 
   return (
     <Surface
-      style={[
-        styles.surface,
-        { backgroundColor: theme.colors.surface, opacity: cardOpacity },
-      ]}
+      style={[styles.surface, { backgroundColor: cardBg, opacity: todo.completed ? 0.5 : 1 }]}
       elevation={1}
     >
       <View style={styles.row}>
-        {/* 메인 터치 영역 (수정 모달 열기) */}
+        {/* 메인 터치 영역 */}
         <TouchableOpacity
           style={styles.touchable}
           onPress={() => onPress(todo)}
@@ -86,14 +74,10 @@ export default function TodoItem({
           accessibilityRole="button"
           accessibilityLabel={`${todo.title} 할일`}
         >
-          {/* 왼쪽 카테고리 색상 바 */}
-          <View
-            style={[styles.colorBar, { backgroundColor: todo.color }]}
-          />
+          <View style={[styles.colorBar, { backgroundColor: todo.color }]} />
 
-          {/* 콘텐츠 영역 */}
           <View style={styles.content}>
-            {/* 제목 (완료 시 취소선) */}
+            {/* 제목 */}
             <Text
               style={[
                 styles.title,
@@ -106,19 +90,16 @@ export default function TodoItem({
               {todo.title}
             </Text>
 
-            {/* 카테고리 · 마감일시 */}
+            {/* 카테고리 · 마감일시 · 알람 */}
             <View style={styles.metaRow}>
               <Text style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>
                 {todo.category}
               </Text>
-              <Text style={[styles.metaDot, { color: theme.colors.outline }]}>
-                ·
-              </Text>
+              <Text style={[styles.metaDot, { color: theme.colors.outline }]}>·</Text>
               <Text style={[styles.metaText, { color: theme.colors.onSurfaceVariant }]}>
                 {todo.deadlineDate}
                 {todo.deadlineTime ? ` ${todo.deadlineTime}` : ''}
               </Text>
-              {/* 알람 아이콘 (알람 설정된 경우) */}
               {todo.alarm && (
                 <MaterialCommunityIcons
                   name="bell-outline"
@@ -129,7 +110,7 @@ export default function TodoItem({
               )}
             </View>
 
-            {/* 메모 1줄 미리보기 (있을 때만 표시) */}
+            {/* 메모 (있을 때만) */}
             {todo.memo ? (
               <Text
                 style={[styles.memoText, { color: theme.colors.outline }]}
@@ -139,48 +120,43 @@ export default function TodoItem({
                 {todo.memo}
               </Text>
             ) : null}
-
-            {/* D-day 뱃지 */}
-            <View
-              style={[
-                styles.ddayBadge,
-                {
-                  backgroundColor: ddayInfo.isUrgent
-                    ? theme.colors.errorContainer ?? `${theme.colors.error}20`
-                    : theme.colors.surfaceVariant,
-                },
-              ]}
-            >
-              <Text style={[styles.ddayText, { color: ddayColor }]}>
-                {ddayInfo.label}
-              </Text>
-            </View>
           </View>
         </TouchableOpacity>
 
-        {/* 오른쪽 버튼 그룹: 체크박스 + 삭제 */}
+        {/* 오른쪽: D-day · 체크박스 · 삭제 — 가로 일렬 */}
         <View style={styles.actions}>
-          {/* 완료 체크박스 */}
-          <Checkbox
-            status={todo.completed ? 'checked' : 'unchecked'}
-            onPress={() => onToggleComplete(todo)}
-            color={theme.colors.primary}
-          />
+          {!todo.completed && (
+            <View
+              style={[
+                styles.ddayBadge,
+                { backgroundColor: urgencyColor + '22', borderColor: urgencyColor + '55' },
+              ]}
+            >
+              <Text style={[styles.ddayText, { color: urgencyColor }]}>
+                {ddayInfo.label}
+              </Text>
+            </View>
+          )}
 
-          {/* 삭제 버튼 */}
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => onDelete(todo)}
-            hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             accessibilityRole="button"
             accessibilityLabel="할일 삭제"
           >
             <MaterialCommunityIcons
               name="trash-can-outline"
-              size={18}
+              size={20}
               color={theme.colors.onSurfaceVariant}
             />
           </TouchableOpacity>
+
+          <Checkbox
+            status={todo.completed ? 'checked' : 'unchecked'}
+            onPress={() => onToggleComplete(todo)}
+            color={theme.colors.primary}
+          />
         </View>
       </View>
     </Surface>
@@ -200,9 +176,8 @@ const styles = StyleSheet.create({
   touchable: {
     flex: 1,
     flexDirection: 'row',
-    minHeight: 56,
+    minHeight: 64,
   },
-  // 왼쪽 카테고리 색상 바
   colorBar: {
     width: 4,
     borderTopLeftRadius: borderRadius.md,
@@ -213,29 +188,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     gap: 3,
+    justifyContent: 'center',
   },
   title: {
     fontSize: 15,
     fontWeight: '600',
     lineHeight: 20,
   },
-  // 완료 상태: 취소선
   titleCompleted: {
     textDecorationLine: 'line-through',
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
   },
   metaText: {
     fontSize: 12,
-    fontWeight: '400',
     lineHeight: 16,
   },
   metaDot: {
     fontSize: 12,
-    marginHorizontal: 4,
+    marginHorizontal: 3,
     lineHeight: 16,
   },
   alarmIcon: {
@@ -244,32 +217,31 @@ const styles = StyleSheet.create({
   memoText: {
     fontSize: 12,
     fontStyle: 'italic',
-    marginTop: 1,
+    lineHeight: 16,
   },
-  // D-day 뱃지
-  ddayBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: spacing.xs + 2,
-    paddingVertical: 2,
-    borderRadius: borderRadius.sm,
-    marginTop: 4,
-  },
-  ddayText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  // 오른쪽 액션 그룹 (체크박스 + 삭제)
+  // 오른쪽 액션 행
   actions: {
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
     paddingRight: spacing.xs,
     gap: 0,
   },
+  ddayBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: borderRadius.sm,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  ddayText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   deleteButton: {
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    padding: 4,
+    marginLeft: spacing.sm,
   },
 });

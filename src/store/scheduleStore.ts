@@ -6,6 +6,7 @@ import {
   getSchedulesByDate,
   getSchedulesByMonth,
   getMarkedDates,
+  getMultiDayEventsForMonth,
   insertSchedule,
   updateSchedule as dbUpdateSchedule,
   deleteSchedule as dbDeleteSchedule,
@@ -47,8 +48,10 @@ interface ScheduleState {
   viewYear: number;
   /** 현재 달력에서 보고 있는 월 (1~12) */
   viewMonth: number;
-  /** 현재 표시 중인 월에 일정이 있는 날짜별 개수 맵 (캘린더 dot 표시용) */
-  markedDates: Record<string, number>;
+  /** 현재 표시 중인 월에 일정이 있는 날짜별 이름표 색상 배열 맵 (캘린더 dot 표시용) */
+  markedDates: Record<string, string[]>;
+  /** 현재 월에 걸쳐 있는 다중일 이벤트 목록 (달력 range bar 렌더링용) */
+  rangeEvents: { startDate: string; endDate: string; color: string }[];
 
   // ── 액션 ──────────────────────────────────
 
@@ -96,6 +99,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   viewYear: initYear,
   viewMonth: initMonth,
   markedDates: {},
+  rangeEvents: [],
 
   // ── 날짜 선택 ─────────────────────────────
 
@@ -126,10 +130,13 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   },
 
   fetchMarkedDates: async (year: number, month: number) => {
-    const rows = await getMarkedDates(year, month);
-    const markedDates: Record<string, number> = {};
-    rows.forEach((r) => { markedDates[r.date] = r.count; });
-    set({ markedDates });
+    const [rows, rangeEvents] = await Promise.all([
+      getMarkedDates(year, month),
+      getMultiDayEventsForMonth(year, month),
+    ]);
+    const markedDates: Record<string, string[]> = {};
+    rows.forEach((r) => { markedDates[r.date] = r.colors; });
+    set({ markedDates, rangeEvents });
   },
 
   // ── 추가 ───────────────────────────────

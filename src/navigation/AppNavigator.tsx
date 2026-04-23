@@ -9,6 +9,7 @@ import ScheduleScreen from '../screens/schedule/ScheduleScreen';
 import RoutineScreen from '../screens/routine/RoutineScreen';
 import AchievementScreen from '../screens/achievement/AchievementScreen';
 import TodoScreen from '../screens/todo/TodoScreen';
+import AccountScreen from '../screens/account/AccountScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import { useAuthStore } from '../store/authStore';
 
@@ -17,6 +18,7 @@ export type RootTabParamList = {
   Routine: undefined;
   Todo: undefined;
   Achievement: undefined;
+  Account: undefined;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -28,6 +30,7 @@ const TAB_ICONS: Record<keyof RootTabParamList, { focused: IconName; unfocused: 
   Routine: { focused: 'repeat', unfocused: 'repeat' },
   Todo: { focused: 'checkbox-marked-circle', unfocused: 'checkbox-marked-circle-outline' },
   Achievement: { focused: 'chart-bar', unfocused: 'chart-bar' },
+  Account: { focused: 'account-circle', unfocused: 'account-circle-outline' },
 };
 
 const TAB_LABELS: Record<keyof RootTabParamList, string> = {
@@ -35,6 +38,7 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   Routine: '루틴',
   Todo: '할일',
   Achievement: '성과',
+  Account: '계정',
 };
 
 export default function AppNavigator(): React.JSX.Element {
@@ -96,9 +100,10 @@ export default function AppNavigator(): React.JSX.Element {
       })}
     >
       <Tab.Screen name="Schedule" component={ScheduleScreen} />
-      <Tab.Screen name="Routine" component={RoutineScreen} />
       <Tab.Screen name="Todo" component={TodoScreen} />
+      <Tab.Screen name="Routine" component={RoutineScreen} />
       <Tab.Screen name="Achievement" component={AchievementScreen} />
+      <Tab.Screen name="Account" component={AccountScreen} />
     </Tab.Navigator>
   );
 }

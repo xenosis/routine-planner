@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -82,7 +83,7 @@ const SCHEDULE_ITEM_HEIGHT = 74; // Surface minHeight(56) + padding(~10) + margi
 export default function ScheduleScreen(): React.JSX.Element {
   const theme = useTheme();
   const {
-    schedules, selectedDate, viewYear, viewMonth, markedDates,
+    schedules, selectedDate, viewYear, viewMonth, markedDates, rangeEvents,
     setSelectedDate, clearSelectedDate,
     fetchByDate, fetchByMonth, fetchMarkedDates,
     addSchedule, updateSchedule, deleteSchedule,
@@ -183,13 +184,17 @@ export default function ScheduleScreen(): React.JSX.Element {
   }, [editingSchedule, deleteSchedule]);
 
   const handleSave = useCallback(async (schedule: Schedule) => {
-    if (editingSchedule) {
-      await updateSchedule(schedule);
-    } else {
-      await addSchedule(schedule);
+    try {
+      if (editingSchedule) {
+        await updateSchedule(schedule);
+      } else {
+        await addSchedule(schedule);
+      }
+      setModalVisible(false);
+      setEditingSchedule(undefined);
+    } catch (e) {
+      Alert.alert('저장 실패', String(e));
     }
-    setModalVisible(false);
-    setEditingSchedule(undefined);
   }, [editingSchedule, addSchedule, updateSchedule]);
 
   const handleClose = useCallback(() => {
@@ -300,6 +305,7 @@ export default function ScheduleScreen(): React.JSX.Element {
         <MonthCalendar
           selectedDate={selectedDate}
           markedDates={markedDates}
+          rangeEvents={rangeEvents}
           onDateSelect={handleDateSelect}
           onMonthChange={handleMonthChange}
         />
@@ -341,6 +347,20 @@ export default function ScheduleScreen(): React.JSX.Element {
           ]}
           showsVerticalScrollIndicator={false}
         />
+      )}
+
+      {/* 날짜 선택 시: 월 전체 보기 버튼 */}
+      {!isMonthView && (
+        <TouchableOpacity
+          style={[styles.monthViewBtn, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}
+          onPress={clearSelectedDate}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons name="calendar-month-outline" size={16} color={theme.colors.onSurfaceVariant} />
+          <Text style={[styles.monthViewBtnText, { color: theme.colors.onSurfaceVariant }]}>
+            월 전체 일정 보기
+          </Text>
+        </TouchableOpacity>
       )}
 
       {/* FAB */}
@@ -396,4 +416,18 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   fab: { position: 'absolute', right: spacing.lg, bottom: spacing.xl, borderRadius: 28 },
+  monthViewBtn: {
+    position: 'absolute',
+    bottom: spacing.xl + 64,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 2,
+  },
+  monthViewBtnText: { fontSize: 13, fontWeight: '600' },
 });

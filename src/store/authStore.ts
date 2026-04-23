@@ -12,6 +12,8 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<string | null>;
   /** 로그아웃 */
   signOut: () => Promise<void>;
+  /** 앱 내 표시 이름 및 색상 변경 */
+  updateDisplayName: (name: string, color: string) => Promise<string | null>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -37,5 +39,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     await supabase.auth.signOut();
     set({ session: null });
+  },
+
+  updateDisplayName: async (name: string, color: string) => {
+    const { error } = await supabase.auth.updateUser({ data: { display_name: name, name_color: color } });
+    if (error) return error.message;
+    const { data } = await supabase.auth.getSession();
+    set({ session: data.session });
+    return null;
   },
 }));

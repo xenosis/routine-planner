@@ -93,12 +93,14 @@ async function scheduleTodoAlarms(todo: Todo): Promise<void> {
           identifier: `${todo.id}_${i}`,
           content: {
             title: todo.title,
-            body: `${minutesBefore}분 후 마감인 할일이 있습니다`,
+            body: minutesBefore === 0 ? '지금 마감인 할일이 있습니다' : `${minutesBefore}분 후 마감인 할일이 있습니다`,
             sound: true,
+            data: { type: 'todo' },
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: new Date(triggerMs),
+            channelId: 'default',
           },
         });
       }
@@ -123,10 +125,12 @@ async function scheduleTodoAlarms(todo: Todo): Promise<void> {
           title: todo.title,
           body: `${todo.title} 마감이 지났어요. 할일을 완료했나요?`,
           sound: true,
+          data: { type: 'todo' },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(triggerMs),
+          channelId: 'default',
         },
       });
     }

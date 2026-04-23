@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getNameColor, NAME_TAG_DEFAULT_COLOR } from '../utils/nameTag';
 
 // ─────────────────────────────────────────────
 // 타입 정의
@@ -7,7 +8,8 @@ import { supabase } from '../lib/supabase';
 export interface Schedule {
   id: string;
   title: string;
-  date: string;         // YYYY-MM-DD
+  date: string;         // YYYY-MM-DD (시작일)
+  endDate?: string;     // YYYY-MM-DD (종료일), 단일 일정이면 undefined
   startTime: string;    // HH:mm
   endTime: string;      // HH:mm
   category: '업무' | '개인' | '건강' | '기타';
@@ -16,7 +18,8 @@ export interface Schedule {
   alarm: boolean;
   alarmTimes?: number[];  // 알람 시간 배열 (분 단위)
   location?: string;
-  participants?: string;
+  nameTag?: string;
+  nameTagColor?: string;
 }
 
 // ─────────────────────────────────────────────
@@ -30,6 +33,7 @@ function rowToSchedule(row: any): Schedule {
     id: row.id,
     title: row.title,
     date: row.date,
+    endDate: row.endDate ?? undefined,
     startTime: row.startTime,
     endTime: row.endTime,
     category: row.category as Schedule['category'],
@@ -40,7 +44,8 @@ function rowToSchedule(row: any): Schedule {
       ? (row.alarmTimes as number[])
       : undefined,
     location: row.location ?? undefined,
-    participants: row.participants ?? undefined,
+    nameTag: row.participants ?? undefined,
+    nameTagColor: row.nameTagColor ?? undefined,
   };
 }
 
@@ -50,6 +55,8 @@ function scheduleToRow(schedule: Schedule) {
     id: schedule.id,
     title: schedule.title,
     date: schedule.date,
+    // date와 같으면 null 저장 (단일 일정)
+    endDate: schedule.endDate && schedule.endDate !== schedule.date ? schedule.endDate : null,
     startTime: schedule.startTime,
     endTime: schedule.endTime,
     category: schedule.category,
@@ -58,7 +65,8 @@ function scheduleToRow(schedule: Schedule) {
     alarm: schedule.alarm,
     alarmTimes: schedule.alarmTimes ?? [],
     location: schedule.location ?? null,
-    participants: schedule.participants ?? null,
+    participants: schedule.nameTag ?? null,
+    nameTagColor: schedule.nameTagColor ?? null,
   };
 }
 
@@ -67,10 +75,12 @@ function scheduleToRow(schedule: Schedule) {
 // ─────────────────────────────────────────────
 
 export async function getSchedulesByDate(date: string): Promise<Schedule[]> {
+  // 시작일 <= 선택날짜 AND (단일일이면 date=선택날짜 / 범위면 endDate >= 선택날짜)
   const { data, error } = await supabase
     .from('schedules')
     .select('*')
-    .eq('date', date)
+    .lte('date', date)
+    .or(`and(endDate.is.null,date.eq.${date}),and(endDate.not.is.null,endDate.gte.${date})`)
     .order('startTime', { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -80,7 +90,7 @@ export async function getSchedulesByDate(date: string): Promise<Schedule[]> {
 export async function getMarkedDates(
   year: number,
   month: number,
-): Promise<{ date: string; count: number }[]> {
+): Promise<{ date: string; colors: string[] }[]> {
   const monthStr = String(month).padStart(2, '0');
   const startDate = `${year}-${monthStr}-01`;
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -89,20 +99,55 @@ export async function getMarkedDates(
 
   const { data, error } = await supabase
     .from('schedules')
-    .select('date')
+    .select('date, participants, nameTagColor')
     .gte('date', startDate)
     .lt('date', endDate);
 
   if (error) throw new Error(error.message);
 
-  // 클라이언트에서 날짜별 개수 집계
-  const countMap = new Map<string, number>();
+  // 날짜별 이름표 색상 집계 (중복 색상 제거)
+  // nameTagColor 저장값 우선, 없으면 이름 해시 fallback
+  const colorMap = new Map<string, Set<string>>();
   for (const row of data ?? []) {
-    countMap.set(row.date, (countMap.get(row.date) ?? 0) + 1);
+    if (!colorMap.has(row.date)) colorMap.set(row.date, new Set());
+    const color = row.nameTagColor ?? (row.participants ? getNameColor(row.participants) : NAME_TAG_DEFAULT_COLOR);
+    colorMap.get(row.date)!.add(color);
   }
-  return Array.from(countMap.entries())
-    .map(([date, count]) => ({ date, count }))
+  return Array.from(colorMap.entries())
+    .map(([date, colorSet]) => ({ date, colors: Array.from(colorSet) }))
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * 해당 월과 겹치는 범위 이벤트(endDate가 있는 일정)를 반환한다.
+ * MonthCalendar의 range bar 렌더링에 사용.
+ */
+export async function getMultiDayEventsForMonth(
+  year: number,
+  month: number,
+): Promise<{ startDate: string; endDate: string; color: string }[]> {
+  const monthStr = String(month).padStart(2, '0');
+  const startDate = `${year}-${monthStr}-01`;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonthStart = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+  const { data, error } = await supabase
+    .from('schedules')
+    .select('date, endDate, color')
+    .not('endDate', 'is', null)
+    .lt('date', nextMonthStart)
+    .gte('endDate', startDate);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? [])
+    .filter((row) => row.endDate && row.endDate !== row.date)
+    .map((row) => ({
+      startDate: row.date as string,
+      endDate: row.endDate as string,
+      color: row.color as string,
+    }));
 }
 
 export async function insertSchedule(schedule: Schedule): Promise<void> {
@@ -130,13 +175,14 @@ export async function getSchedulesByMonth(
   const startDate = `${year}-${monthStr}-01`;
   const nextMonth = month === 12 ? 1 : month + 1;
   const nextYear = month === 12 ? year + 1 : year;
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+  const nextMonthStart = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
 
+  // date < 다음달1일 AND (단일일이면 date >= 이번달1일 / 범위면 endDate >= 이번달1일)
   const { data, error } = await supabase
     .from('schedules')
     .select('*')
-    .gte('date', startDate)
-    .lt('date', endDate)
+    .lt('date', nextMonthStart)
+    .or(`and(endDate.is.null,date.gte.${startDate}),and(endDate.not.is.null,endDate.gte.${startDate})`)
     .order('date', { ascending: true })
     .order('startTime', { ascending: true });
 

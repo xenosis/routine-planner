@@ -109,8 +109,8 @@ async function scheduleRoutineAlarm(routine: Routine): Promise<void> {
       // 매일 반복 알람
       await Notifications.scheduleNotificationAsync({
         identifier: routine.id,
-        content: { title: '루틴 알림', body: `${routine.title} 할 시간이에요!` },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
+        content: { title: '루틴 알림', body: `${routine.title} 할 시간이에요!`, data: { type: 'routine' } },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: 'default' },
       });
     } else if (
       (routine.frequency === 'weekly_days' || routine.frequency === 'weekly_count') &&
@@ -124,12 +124,13 @@ async function scheduleRoutineAlarm(routine: Routine): Promise<void> {
         const expoWeekday = jsDay === 0 ? 1 : jsDay + 1;
         await Notifications.scheduleNotificationAsync({
           identifier: `${routine.id}_${jsDay}`,
-          content: { title: '루틴 알림', body: `${routine.title} 할 시간이에요!` },
+          content: { title: '루틴 알림', body: `${routine.title} 할 시간이에요!`, data: { type: 'routine' } },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
             weekday: expoWeekday,
             hour,
             minute,
+            channelId: 'default',
           },
         });
       }
@@ -517,6 +518,7 @@ export default function AddRoutineScreen({
             {
               backgroundColor: theme.colors.surface,
               borderTopColor: theme.colors.outlineVariant,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm,
             },
           ]}
         >

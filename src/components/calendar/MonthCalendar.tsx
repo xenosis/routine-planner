@@ -5,15 +5,21 @@ import { borderRadius, spacing } from '../../theme';
 
 const WEEK_DAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
-// 스와이프 감지 임계값
 const SWIPE_THRESHOLD = 50;
 const SWIPE_VELOCITY_THRESHOLD = 0.3;
 
+interface RangeBarInfo {
+  color: string;
+  roundLeft: boolean;
+  roundRight: boolean;
+}
+
 interface MonthCalendarProps {
-  selectedDate: string | null;   // null = 날짜 미선택 상태
-  markedDates: Record<string, number>;
+  selectedDate: string | null;
+  markedDates: Record<string, string[]>;
   onDateSelect: (date: string) => void;
   onMonthChange: (year: number, month: number) => void;
+  rangeEvents?: { startDate: string; endDate: string; color: string }[];
 }
 
 function toDateString(year: number, month: number, day: number): string {
@@ -30,16 +36,15 @@ export default function MonthCalendar({
   markedDates,
   onDateSelect,
   onMonthChange,
+  rangeEvents,
 }: MonthCalendarProps): React.JSX.Element {
   const theme = useTheme();
   const today = getTodayString();
 
-  // 초기 뷰 연/월: selectedDate가 있으면 그 월, 없으면 오늘
   const initial = selectedDate || getTodayString();
   const [viewYear, setViewYear] = useState(() => parseInt(initial.split('-')[0], 10));
   const [viewMonth, setViewMonth] = useState(() => parseInt(initial.split('-')[1], 10));
 
-  // selectedDate가 외부에서 변경되면 달력 뷰 월도 동기화
   useEffect(() => {
     if (selectedDate !== null) {
       const y = parseInt(selectedDate.split('-')[0], 10);
@@ -67,11 +72,9 @@ export default function MonthCalendar({
     onMonthChange(y, m);
   }
 
-  // 스와이프 감지 PanResponder
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // 수평 움직임이 주요 제스처일 때만 캡처
         onMoveShouldSetPanResponder: (_, gs) =>
           Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
         onPanResponderRelease: (_, gs) => {
@@ -88,7 +91,6 @@ export default function MonthCalendar({
     [viewYear, viewMonth],
   );
 
-  // 캘린더 그리드 셀 계산
   const cells = useMemo(() => {
     const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay();
     const lastDate = new Date(viewYear, viewMonth, 0).getDate();
@@ -114,8 +116,33 @@ export default function MonthCalendar({
     return result;
   }, [viewYear, viewMonth]);
 
-  // 날짜별 점 개수 (최대 3개)
-  const getDotCount = (dateStr: string) => Math.min(markedDates[dateStr] ?? 0, 3);
+  // 날짜별 range bar 정보 사전 계산
+  const rangeBarMap = useMemo(() => {
+    const map: Record<string, RangeBarInfo[]> = {};
+    if (!rangeEvents || rangeEvents.length === 0) return map;
+
+    for (const ev of rangeEvents) {
+      const cur = new Date(ev.startDate + 'T00:00:00');
+      const end = new Date(ev.endDate + 'T00:00:00');
+
+      while (cur <= end) {
+        const dateStr = toDateString(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
+        const dow = cur.getDay();
+
+        if (!map[dateStr]) map[dateStr] = [];
+        map[dateStr].push({
+          color: ev.color,
+          roundLeft: dateStr === ev.startDate || dow === 0,
+          roundRight: dateStr === ev.endDate || dow === 6,
+        });
+
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
+    return map;
+  }, [rangeEvents]);
+
+  const getDotColors = (dateStr: string): string[] => (markedDates[dateStr] ?? []).slice(0, 3);
 
   return (
     <View
@@ -160,7 +187,8 @@ export default function MonthCalendar({
         {cells.map((cell, index) => {
           const isToday = cell.dateStr === today;
           const isSelected = selectedDate !== null && cell.dateStr === selectedDate;
-          const dotCount = cell.isCurrent ? getDotCount(cell.dateStr) : 0;
+          const dotColors = cell.isCurrent ? getDotColors(cell.dateStr) : [];
+          const bars = cell.isCurrent ? (rangeBarMap[cell.dateStr] ?? []).slice(0, 2) : [];
           const dow = index % 7;
 
           let textColor = theme.colors.onBackground;
@@ -190,12 +218,33 @@ export default function MonthCalendar({
                   {cell.day}
                 </Text>
               </View>
-              {dotCount > 0 && (
+
+              {/* Range bars */}
+              {bars.map((bar, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.rangeBar,
+                    {
+                      backgroundColor: bar.color + '55',
+                      marginLeft: bar.roundLeft ? 3 : 0,
+                      marginRight: bar.roundRight ? 3 : 0,
+                      borderTopLeftRadius: bar.roundLeft ? 3 : 0,
+                      borderBottomLeftRadius: bar.roundLeft ? 3 : 0,
+                      borderTopRightRadius: bar.roundRight ? 3 : 0,
+                      borderBottomRightRadius: bar.roundRight ? 3 : 0,
+                      marginTop: idx === 0 ? 2 : 1,
+                    },
+                  ]}
+                />
+              ))}
+
+              {dotColors.length > 0 && (
                 <View style={styles.dotRow}>
-                  {Array.from({ length: dotCount }).map((_, i) => (
+                  {dotColors.map((color, i) => (
                     <View
                       key={i}
-                      style={[styles.dot, { backgroundColor: theme.colors.primary }]}
+                      style={[styles.dot, { backgroundColor: color }]}
                     />
                   ))}
                 </View>
@@ -243,6 +292,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayText: { fontSize: 13, fontWeight: '500' },
+  rangeBar: {
+    height: 5,
+    alignSelf: 'stretch',
+  },
   dotRow: { flexDirection: 'row', gap: 3, marginTop: 2 },
   dot: { width: 4, height: 4, borderRadius: 2 },
 });
