@@ -13,14 +13,12 @@ import {
   Chip,
   Divider,
   IconButton,
-  Surface,
   Switch,
   Text,
   TextInput,
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Todo } from '../../db/todoDb';
@@ -36,13 +34,11 @@ const CATEGORY_COLORS: Record<Todo['category'], string> = {
 
 // 알람 프리셋 (분 단위) — 마감 기준 N분 전
 const ALARM_PRESETS = [
+  { label: '마감시각', minutes: 0 },
   { label: '10분', minutes: 10 },
   { label: '30분', minutes: 30 },
   { label: '1시간', minutes: 60 },
-  { label: '3시간', minutes: 180 },
   { label: '1일', minutes: 1440 },
-  { label: '2일', minutes: 2880 },
-  { label: '1주', minutes: 10080 },
 ] as const;
 
 // 직접 입력 단위
@@ -50,9 +46,10 @@ const TIME_UNITS = [
   { label: '분', value: 'min' as const },
   { label: '시간', value: 'hour' as const },
   { label: '일', value: 'day' as const },
+  { label: '주', value: 'week' as const },
 ] as const;
 
-type TimeUnit = 'min' | 'hour' | 'day';
+type TimeUnit = 'min' | 'hour' | 'day' | 'week';
 
 // 카테고리 선택 옵션
 const CATEGORY_OPTIONS: Array<{ value: Todo['category']; label: string }> = [
@@ -67,6 +64,7 @@ const CATEGORY_OPTIONS: Array<{ value: Todo['category']; label: string }> = [
  * 예: 10 → "10분 전", 60 → "1시간 전", 1440 → "1일 전"
  */
 function formatAlarmTime(minutes: number): string {
+  if (minutes === 0) return '마감 시각';
   if (minutes < 60) return `${minutes}분 전`;
   if (minutes < 1440) {
     const h = minutes / 60;
@@ -162,8 +160,9 @@ export default function AddTodoScreen({
   // 알람 토글 핸들러
   const handleAlarmToggle = useCallback((val: boolean) => {
     setAlarmEnabled(val);
-    if (!val) {
-      // 알람 끄면 등록된 알람 전부 초기화
+    if (val) {
+      setShowAddPanel(true);
+    } else {
       setAlarmTimes([]);
       setShowAddPanel(false);
     }
@@ -186,6 +185,7 @@ export default function AddTodoScreen({
     let minutes = num;
     if (customUnit === 'hour') minutes = num * 60;
     if (customUnit === 'day') minutes = num * 1440;
+    if (customUnit === 'week') minutes = num * 10080;
 
     setAlarmTimes((prev) => {
       if (prev.includes(minutes)) return prev;
@@ -415,16 +415,17 @@ export default function AddTodoScreen({
             )}
           </View>
 
-          {/* 메모 */}
+          {/* 메모 — 내용이 길면 자동으로 높이 확장 (scrollEnabled=false) */}
           <TextInput
             label="메모 (선택)"
             value={memo}
-            onChangeText={setMemo}
+            onChangeText={(v) => setMemo(v.trimStart())}
             mode="outlined"
             style={[styles.input, styles.memoInput]}
+            contentStyle={styles.memoContent}
             placeholder="메모를 입력하세요"
             multiline
-            numberOfLines={3}
+            scrollEnabled={false}
             maxLength={300}
           />
 
@@ -624,6 +625,7 @@ export default function AddTodoScreen({
             {
               backgroundColor: theme.colors.surface,
               borderTopColor: theme.colors.outlineVariant,
+              paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm,
             },
           ]}
         >
@@ -710,6 +712,10 @@ const styles = StyleSheet.create({
   },
   memoInput: {
     minHeight: 90,
+  },
+  memoContent: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   // 인라인 날짜 달력
   inlineDatePicker: {
