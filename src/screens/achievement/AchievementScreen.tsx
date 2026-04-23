@@ -21,8 +21,11 @@ import {
   getTodayCompletedCount,
   getTotalCompletionCount,
   getEarliestRoutineCreatedAt,
+  getRoutineScheduleInfo,
+  getWeeklyCompletionsByRoutine,
   type RoutineAchievementRow,
   type DailyCompletionRow,
+  type RoutineScheduleInfo,
 } from '../../db/achievementDb';
 import { borderRadius, spacing } from '../../theme';
 
@@ -56,13 +59,34 @@ function getDayLabel(dateStr: string): string {
   return ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
 }
 
-/** 이번 주 월요일 ~ 오늘 사이의 날짜 문자열 배열 반환 (최대 7일) */
-function getLast7Days(today: string): string[] {
+/** 이번 주 월요일 ~ 오늘까지의 날짜 문자열 배열 반환 (1~7일) */
+function getThisWeekDays(today: string): string[] {
+  const [y, m, d] = today.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dow = date.getDay(); // 0=일, 1=월, ..., 6=토
+  const daysFromMon = dow === 0 ? 6 : dow - 1;
   const dates: string[] = [];
-  for (let i = 6; i >= 0; i--) {
+  for (let i = daysFromMon; i >= 0; i--) {
     dates.push(getDateBefore(today, i));
   }
   return dates;
+}
+
+/**
+ * 특정 날짜에 예정된 루틴 수를 계산한다.
+ * - daily / weekly_count: 항상 예정
+ * - weekly_days: 해당 날짜의 요일이 weekdays 배열에 포함될 때만 예정
+ * - 루틴 생성일(createdAt) 이후부터만 포함
+ */
+function getScheduledCountForDate(date: string, routines: RoutineScheduleInfo[]): number {
+  const [y, m, d] = date.split('-').map(Number);
+  const weekday = new Date(y, m - 1, d).getDay();
+  return routines.filter((r) => {
+    if (r.createdAt > date) return false;
+    if (r.frequency === 'daily' || r.frequency === 'weekly_count') return true;
+    if (r.frequency === 'weekly_days') return r.weekdays?.includes(weekday) ?? false;
+    return false;
+  }).length;
 }
 
 // ─────────────────────────────────────────────
@@ -72,6 +96,8 @@ function getLast7Days(today: string): string[] {
 interface AchievementData {
   /** 오늘 완료 루틴 수 */
   todayCompleted: number;
+  /** 오늘 예정된 루틴 수 (daily + weekly_count + 오늘 요일에 해당하는 weekly_days) */
+  todayScheduled: number;
   /** 전체 루틴 수 */
   totalRoutines: number;
   /** 이번 주 달성률 (0 ~ 100) */
@@ -83,11 +109,13 @@ interface AchievementData {
   /** 누적 완료 횟수 */
   totalCompletions: number;
   /** 주간 차트 데이터 (7일) */
-  weeklyChartData: { label: string; value: number; date: string }[];
+  weeklyChartData: { label: string; value: number; scheduled: number; date: string }[];
   /** 루틴별 달성률 목록 */
   routineAchievements: RoutineAchievementRow[];
   /** 가장 오래된 루틴 생성일 */
   earliestRoutineDate: string;
+  /** 날짜별 예정 루틴 계산용 스케줄 정보 */
+  routineSchedules: RoutineScheduleInfo[];
 }
 
 // ─────────────────────────────────────────────
@@ -107,8 +135,8 @@ function useAchievementData() {
       await initDatabase();
 
       const today = getTodayString();
-      const last7Days = getLast7Days(today);
-      const weekStart = last7Days[0];
+      const thisWeekDays = getThisWeekDays(today);
+      const weekStart = thisWeekDays[0];
 
       // 병렬로 데이터 조회
       const [
@@ -116,16 +144,23 @@ function useAchievementData() {
         totalRoutines,
         totalCompletions,
         weeklyCompletions,
+        weeklyRoutineCompletions,
         routineAchievements,
         earliestRoutineDate,
+        routineSchedules,
       ] = await Promise.all([
         getTodayCompletedCount(today),
         getTotalRoutineCount(),
         getTotalCompletionCount(),
         getDailyCompletions(weekStart, today),
+        getWeeklyCompletionsByRoutine(weekStart, today),
         getRoutineAchievements(today),
         getEarliestRoutineCreatedAt(today),
+        getRoutineScheduleInfo(),
       ]);
+
+      // 오늘 예정된 루틴 수 (요일 조건 반영)
+      const todayScheduled = getScheduledCountForDate(today, routineSchedules);
 
       // routineAchievements에서 최고 스트릭 루틴 도출 (단위 포함)
       const maxStreakRoutine = routineAchievements.reduce<typeof routineAchievements[number] | null>(
@@ -135,38 +170,54 @@ function useAchievementData() {
       const maxStreak = maxStreakRoutine?.streak ?? 0;
       const maxStreakUnit = maxStreakRoutine?.frequency === 'weekly_count' ? '주' : '일';
 
-      // 주간 달성률 계산
+      // 주간 차트: 각 날짜별로 "그날 예정된 루틴 수"를 분모로 사용
       const completionMap = new Map<string, number>(
         weeklyCompletions.map((r) => [r.date, r.completedCount]),
       );
-
-      const weeklyChartData = last7Days.map((date) => {
+      const weeklyChartData = thisWeekDays.map((date) => {
         const completed = completionMap.get(date) ?? 0;
-        // 달성률 = 완료 수 / 전체 루틴 수 * 100 (루틴 없으면 0)
-        const rate = totalRoutines > 0 ? Math.round((completed / totalRoutines) * 100) : 0;
+        const scheduled = getScheduledCountForDate(date, routineSchedules);
+        const rate = scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
         return {
           label: getDayLabel(date),
           value: rate,
+          scheduled,
           date,
         };
       });
 
-      // 주간 달성률: 루틴 등록일(earliestRoutineDate) ~ 오늘 구간만 분모에 포함
-      // 루틴 등록 이전 날은 제외, 등록 후 안 한 날은 0%로 포함
+      // 주간 달성률: 루틴별로 계산 후 평균
+      // - daily / weekly_days: 이번 주 예정 일수 대비 완료 일수
+      // - weekly_count: min(완료횟수, quota) / quota
+      const routineWeeklyDoneMap = new Map(
+        weeklyRoutineCompletions.map((r) => [r.routineId, r.count]),
+      );
       let weeklyRate = 0;
-      if (totalRoutines > 0) {
-        const validDays = weeklyChartData.filter(
-          (d) => d.date >= earliestRoutineDate && d.date <= today,
+      const activeRoutines = routineSchedules.filter((r) => r.createdAt <= today);
+      if (activeRoutines.length > 0) {
+        const rates = activeRoutines.map((routine) => {
+          const done = routineWeeklyDoneMap.get(routine.id) ?? 0;
+          if (routine.frequency === 'weekly_count') {
+            const quota = routine.weeklyCount ?? 1;
+            return Math.min(done / quota, 1);
+          }
+          const scheduledDays = thisWeekDays.filter((d) => {
+            if (d < routine.createdAt) return false;
+            const [y, mo, day] = d.split('-').map(Number);
+            const weekday = new Date(y, mo - 1, day).getDay();
+            if (routine.frequency === 'daily') return true;
+            return routine.weekdays?.includes(weekday) ?? false;
+          }).length;
+          return scheduledDays > 0 ? Math.min(done / scheduledDays, 1) : 1;
+        });
+        weeklyRate = Math.round(
+          (rates.reduce((a, b) => a + b, 0) / rates.length) * 100,
         );
-        if (validDays.length > 0) {
-          weeklyRate = Math.round(
-            validDays.reduce((sum, d) => sum + d.value, 0) / validDays.length,
-          );
-        }
       }
 
       setData({
         todayCompleted,
+        todayScheduled,
         totalRoutines,
         weeklyRate,
         maxStreak,
@@ -175,6 +226,7 @@ function useAchievementData() {
         weeklyChartData,
         routineAchievements,
         earliestRoutineDate,
+        routineSchedules,
       });
     } catch (e) {
       setError('데이터를 불러오는 중 오류가 발생했습니다.');
@@ -201,7 +253,7 @@ function buildMarkedDates(
   year: number,
   month: number,
   today: string,
-  totalRoutines: number,
+  routineSchedules: RoutineScheduleInfo[],
   monthlyCompletions: DailyCompletionRow[],
   earliestRoutineDate: string,
 ): MarkedDates {
@@ -223,15 +275,18 @@ function buildMarkedDates(
     // 루틴 추가 이전 날짜는 마킹 제외
     if (dateKey < earliestRoutineDate) continue;
 
-    const completed = monthCompletionMap.get(dateKey) ?? 0;
+    // 해당 날짜에 예정된 루틴 수 계산 (weekly_days 요일 조건 반영)
+    const scheduled = getScheduledCountForDate(dateKey, routineSchedules);
 
-    if (totalRoutines > 0) {
-      const isFullyDone = completed >= totalRoutines;
-      markedDates[dateKey] = {
-        marked: true,
-        dotColor: isFullyDone ? '#10B981' : completed > 0 ? '#F59E0B' : '#EF4444',
-      };
-    }
+    // 예정 루틴 없는 날은 마킹 제외
+    if (scheduled === 0) continue;
+
+    const completed = monthCompletionMap.get(dateKey) ?? 0;
+    const isFullyDone = completed >= scheduled;
+    markedDates[dateKey] = {
+      marked: true,
+      dotColor: isFullyDone ? '#10B981' : completed > 0 ? '#F59E0B' : '#EF4444',
+    };
   }
 
   // 오늘 날짜는 선택 상태로 추가 표시
@@ -250,7 +305,7 @@ function buildMarkedDates(
 
 interface SummaryCardsProps {
   todayCompleted: number;
-  totalRoutines: number;
+  todayScheduled: number;
   weeklyRate: number;
   maxStreak: number;
   maxStreakUnit: string;
@@ -259,7 +314,7 @@ interface SummaryCardsProps {
 
 const SummaryCards = React.memo(function SummaryCards({
   todayCompleted,
-  totalRoutines,
+  todayScheduled,
   weeklyRate,
   maxStreak,
   maxStreakUnit,
@@ -284,7 +339,7 @@ const SummaryCards = React.memo(function SummaryCards({
           <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
             {todayCompleted}
             <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>
-              {' '}/ {totalRoutines}
+              {' '}/ {todayScheduled}
             </Text>
           </Text>
           <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
@@ -398,7 +453,7 @@ const summaryStyles = StyleSheet.create({
 // ─────────────────────────────────────────────
 
 interface WeeklyChartProps {
-  chartData: { label: string; value: number }[];
+  chartData: { label: string; value: number; scheduled: number }[];
 }
 
 const WeeklyChart = React.memo(function WeeklyChart({
@@ -535,13 +590,13 @@ const chartStyles = StyleSheet.create({
 
 interface MonthlyCalendarProps {
   today: string;
-  totalRoutines: number;
+  routineSchedules: RoutineScheduleInfo[];
   earliestRoutineDate: string;
 }
 
 const MonthlyCalendar = React.memo(function MonthlyCalendar({
   today,
-  totalRoutines,
+  routineSchedules,
   earliestRoutineDate,
 }: MonthlyCalendarProps): React.JSX.Element {
   const theme = useTheme();
@@ -556,11 +611,11 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
     let cancelled = false;
     getMonthlyCompletions(viewYear, viewMonth).then((completions) => {
       if (!cancelled) {
-        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, totalRoutines, completions, earliestRoutineDate));
+        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, routineSchedules, completions, earliestRoutineDate));
       }
     });
     return () => { cancelled = true; };
-  }, [viewYear, viewMonth, today, totalRoutines, earliestRoutineDate]);
+  }, [viewYear, viewMonth, today, routineSchedules, earliestRoutineDate]);
 
   return (
     <Surface
@@ -922,7 +977,7 @@ export default function AchievementScreen(): React.JSX.Element {
       {/* 요약 카드 (탭 전환과 무관하게 항상 표시) */}
       <SummaryCards
         todayCompleted={data.todayCompleted}
-        totalRoutines={data.totalRoutines}
+        todayScheduled={data.todayScheduled}
         weeklyRate={data.weeklyRate}
         maxStreak={data.maxStreak}
         maxStreakUnit={data.maxStreakUnit}
@@ -953,7 +1008,7 @@ export default function AchievementScreen(): React.JSX.Element {
         {activeTab === 'monthly' && (
           <MonthlyCalendar
             today={today}
-            totalRoutines={data.totalRoutines}
+            routineSchedules={data.routineSchedules}
             earliestRoutineDate={data.earliestRoutineDate}
           />
         )}

@@ -178,6 +178,56 @@ export async function getTotalRoutineCount(): Promise<number> {
 }
 
 /**
+ * 각 루틴의 스케줄 정보를 반환한다.
+ * "어느 날 예정된 루틴인지"를 날짜별로 계산하기 위해 사용한다.
+ */
+export interface RoutineScheduleInfo {
+  id: string;
+  frequency: 'daily' | 'weekly_days' | 'weekly_count';
+  weekdays: number[] | null;
+  weeklyCount: number | null;
+  createdAt: string;
+}
+
+export async function getRoutineScheduleInfo(): Promise<RoutineScheduleInfo[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{
+    id: string;
+    frequency: string;
+    weekdays: string | null;
+    weeklyCount: number | null;
+    createdAt: string;
+  }>('SELECT id, frequency, weekdays, weeklyCount, createdAt FROM routines');
+
+  return rows.map((r) => ({
+    id: r.id,
+    frequency: (r.frequency ?? 'daily') as RoutineScheduleInfo['frequency'],
+    weekdays: r.weekdays ? (JSON.parse(r.weekdays) as number[]) : null,
+    weeklyCount: r.weeklyCount ?? null,
+    createdAt: r.createdAt,
+  }));
+}
+
+export interface WeeklyRoutineCompletion {
+  routineId: string;
+  count: number;
+}
+
+export async function getWeeklyCompletionsByRoutine(
+  weekStart: string,
+  weekEnd: string,
+): Promise<WeeklyRoutineCompletion[]> {
+  const db = await getDb();
+  return db.getAllAsync<WeeklyRoutineCompletion>(
+    `SELECT routineId, COUNT(*) as count
+     FROM routine_completions
+     WHERE date BETWEEN ? AND ?
+     GROUP BY routineId`,
+    [weekStart, weekEnd],
+  );
+}
+
+/**
  * 오늘 완료한 루틴 수를 반환한다.
  */
 export async function getTodayCompletedCount(today: string): Promise<number> {

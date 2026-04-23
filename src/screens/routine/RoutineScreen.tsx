@@ -93,12 +93,12 @@ export default function RoutineScreen(): React.JSX.Element {
   }, [routines]);
 
   // 진행률 계산 (0 ~ 1, 오늘 루틴 기준)
-  // weekly_count는 quota 달성 여부로 완료 판단
+  // weekly_count: 오늘 체크했거나 quota 달성 시 완료로 판단
   const progress = useMemo(() => {
     if (todayRoutines.length === 0) return 0;
     const doneCount = todayRoutines.filter((r) => {
       if (r.frequency === 'weekly_count' && r.weeklyCount) {
-        return (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
+        return completedIds.includes(r.id) || (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
       }
       return completedIds.includes(r.id);
     }).length;
@@ -263,11 +263,11 @@ export default function RoutineScreen(): React.JSX.Element {
           </Text>
         </View>
 
-        {/* 완료 카운트 (오늘 루틴 기준, weekly_count는 quota 달성 기준) */}
+        {/* 완료 카운트 (오늘 루틴 기준, weekly_count는 오늘 체크 or quota 달성) */}
         <Text style={[styles.completionCount, { color: theme.colors.onSurfaceVariant }]}>
           {todayRoutines.filter((r) => {
             if (r.frequency === 'weekly_count' && r.weeklyCount) {
-              return (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
+              return completedIds.includes(r.id) || (weekCompletions[r.id]?.length ?? 0) >= r.weeklyCount;
             }
             return completedIds.includes(r.id);
           }).length} / {todayRoutines.length} 완료
