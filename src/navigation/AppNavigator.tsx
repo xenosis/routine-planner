@@ -12,6 +12,7 @@ import TodoScreen from '../screens/todo/TodoScreen';
 import AccountScreen from '../screens/account/AccountScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import { useAuthStore } from '../store/authStore';
+import { consumePendingNotifType, navigateToTab } from '../utils/navigationRef';
 
 export type RootTabParamList = {
   Schedule: undefined;
@@ -49,6 +50,14 @@ export default function AppNavigator(): React.JSX.Element {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // 앱 killed 상태에서 알림으로 진입한 경우: auth 로딩 완료 후 탭 이동
+  useEffect(() => {
+    if (!loading) {
+      const type = consumePendingNotifType();
+      if (type) navigateToTab(type);
+    }
+  }, [loading]);
 
   if (loading) {
     return (

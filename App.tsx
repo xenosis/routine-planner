@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Alert, Linking, Platform, useColorScheme } from 'react-native';
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -9,16 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { lightTheme, darkTheme } from './src/theme';
-import type { RootTabParamList } from './src/navigation/AppNavigator';
-
-export const navigationRef = createNavigationContainerRef<RootTabParamList>();
-
-function navigateByNotificationType(type: string | undefined) {
-  if (!navigationRef.isReady()) return;
-  if (type === 'schedule') navigationRef.navigate('Schedule');
-  else if (type === 'todo') navigationRef.navigate('Todo');
-  else if (type === 'routine') navigationRef.navigate('Routine');
-}
+import { navigationRef, navigateToTab, setPendingNotifType } from './src/utils/navigationRef';
 
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
@@ -101,17 +92,18 @@ export default function App(): React.JSX.Element {
     setupNotifications();
 
     // 앱이 종료된 상태에서 알림 탭으로 실행된 경우
+    // navigationRef와 탭이 아직 준비 안 됐을 수 있으므로 pending으로 저장 → AppNavigator에서 처리
     Notifications.getLastNotificationResponseAsync().then((response) => {
       if (response) {
         const type = response.notification.request.content.data?.type as string | undefined;
-        navigateByNotificationType(type);
+        setPendingNotifType(type);
       }
     });
 
-    // 앱이 실행 중이거나 백그라운드일 때 알림 탭
+    // 앱이 실행 중이거나 백그라운드일 때 알림 탭 (이미 준비됐으므로 바로 navigate)
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const type = response.notification.request.content.data?.type as string | undefined;
-      navigateByNotificationType(type);
+      navigateToTab(type);
     });
 
     return () => sub.remove();
