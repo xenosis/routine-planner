@@ -195,15 +195,15 @@ export async function getRoutineScheduleInfo(): Promise<RoutineScheduleInfo[]> {
     id: string;
     frequency: string;
     weekdays: string | null;
-    weeklyCount: number | null;
+    weekly_count: number | null;
     createdAt: string;
-  }>('SELECT id, frequency, weekdays, weeklyCount, createdAt FROM routines');
+  }>('SELECT id, frequency, weekdays, weekly_count, createdAt FROM routines');
 
   return rows.map((r) => ({
     id: r.id,
     frequency: (r.frequency ?? 'daily') as RoutineScheduleInfo['frequency'],
     weekdays: r.weekdays ? (JSON.parse(r.weekdays) as number[]) : null,
-    weeklyCount: r.weeklyCount ?? null,
+    weeklyCount: r.weekly_count ?? null,
     createdAt: r.createdAt,
   }));
 }
