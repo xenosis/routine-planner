@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -164,18 +164,18 @@ export default function AddScheduleScreen({
   const displayName = useAuthStore((s) => s.session?.user.user_metadata?.display_name ?? '');
   const nameColor = useAuthStore((s) => s.session?.user.user_metadata?.name_color ?? '');
 
-  // 폼 상태
-  const [title, setTitle] = useState('');
-  const [date, setDate] = useState(initialDate);
-  const [endDate, setEndDate] = useState(initialDate);
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:00');
-  const [category, setCategory] = useState<Schedule['category']>('개인');
-  const [location, setLocation] = useState('');
-  const [nameTag, setNameTag] = useState('');
-  const [nameTagColor, setNameTagColor] = useState('');
-  const [memo, setMemo] = useState('');
-  const [alarmEnabled, setAlarmEnabled] = useState(false);
+  // 폼 상태 — 조건부 렌더링으로 마운트마다 올바른 초기값으로 시작
+  const [title, setTitle] = useState(() => schedule?.title ?? '');
+  const [date, setDate] = useState(() => schedule?.date ?? initialDate);
+  const [endDate, setEndDate] = useState(() => schedule?.endDate ?? schedule?.date ?? initialDate);
+  const [startTime, setStartTime] = useState(() => schedule?.startTime ?? '09:00');
+  const [endTime, setEndTime] = useState(() => schedule?.endTime ?? '10:00');
+  const [category, setCategory] = useState<Schedule['category']>(() => schedule?.category ?? '개인');
+  const [location, setLocation] = useState(() => schedule?.location ?? '');
+  const [nameTag, setNameTag] = useState(() => schedule ? (schedule.nameTag ?? '') : displayName);
+  const [nameTagColor, setNameTagColor] = useState(() => schedule ? (schedule.nameTagColor ?? '') : nameColor);
+  const [memo, setMemo] = useState(() => schedule?.memo ?? '');
+  const [alarmEnabled, setAlarmEnabled] = useState(() => schedule?.alarm ?? false);
 
   // UI 상태
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -184,50 +184,10 @@ export default function AddScheduleScreen({
   const [showLocationSearch, setShowLocationSearch] = useState(false);
 
   // 복수 알람 상태
-  const [alarmTimes, setAlarmTimes] = useState<number[]>([]);
+  const [alarmTimes, setAlarmTimes] = useState<number[]>(() => schedule?.alarmTimes ?? []);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [customValue, setCustomValue] = useState('');
   const [customUnit, setCustomUnit] = useState<TimeUnit>('min');
-
-  // 수정 모드일 때 기존 데이터로 폼 초기화 (useLayoutEffect: 화면에 그려지기 전 상태 설정)
-  useLayoutEffect(() => {
-    if (!visible) return;
-    if (schedule) {
-      setTitle(schedule.title);
-      setDate(schedule.date);
-      setEndDate(schedule.endDate ?? schedule.date);
-      setStartTime(schedule.startTime);
-      setEndTime(schedule.endTime);
-      setCategory(schedule.category);
-      setLocation(schedule.location ?? '');
-      setNameTag(schedule.nameTag ?? '');
-      setNameTagColor(schedule.nameTagColor ?? '');
-      setMemo(schedule.memo ?? '');
-      setAlarmEnabled(schedule.alarm);
-      setAlarmTimes(schedule.alarmTimes ?? []);
-    } else {
-      // 추가 모드 초기화
-      setTitle('');
-      setDate(initialDate);
-      setEndDate(initialDate);
-      setStartTime('09:00');
-      setEndTime('10:00');
-      setCategory('개인');
-      setLocation('');
-      setNameTag(displayName);
-      setNameTagColor(nameColor);
-      setMemo('');
-      setAlarmEnabled(false);
-      setAlarmTimes([]);
-    }
-    // 공통 UI 상태 초기화
-    setShowDatePicker(false);
-    setShowCategoryMenu(false);
-    setShowLocationSearch(false);
-    setShowAddPanel(false);
-    setCustomValue('');
-    setCustomUnit('min');
-  }, [schedule, initialDate, visible]);
 
   // 알람 토글 핸들러
   const handleAlarmToggle = useCallback((val: boolean) => {
@@ -556,12 +516,14 @@ export default function AddScheduleScreen({
           <View style={styles.doubleRow}>
             <TextInput
               label="장소"
-              value={location || ' '}
+              value={location}
               onChangeText={(v) => setLocation(v.trimStart())}
               mode="outlined"
               style={styles.halfInput}
               placeholder="장소 검색"
               maxLength={100}
+              returnKeyType="search"
+              onSubmitEditing={() => setShowLocationSearch(true)}
               right={<TextInput.Icon icon="magnify" onPress={() => setShowLocationSearch(true)} />}
             />
             <TextInput

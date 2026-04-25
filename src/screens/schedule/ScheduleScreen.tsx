@@ -371,15 +371,17 @@ export default function ScheduleScreen(): React.JSX.Element {
         onPress={handleFABPress}
       />
 
-      {/* 일정 추가/수정 모달 */}
-      <AddScheduleScreen
-        visible={modalVisible}
-        initialDate={defaultDate}
-        schedule={editingSchedule}
-        onSave={handleSave}
-        onClose={handleClose}
-        onDelete={editingSchedule ? handleDeleteFromModal : undefined}
-      />
+      {/* 일정 추가/수정 모달 — 열릴 때만 마운트해서 초기값을 올바르게 설정 */}
+      {modalVisible && (
+        <AddScheduleScreen
+          visible={true}
+          initialDate={defaultDate}
+          schedule={editingSchedule}
+          onSave={handleSave}
+          onClose={handleClose}
+          onDelete={editingSchedule ? handleDeleteFromModal : undefined}
+        />
+      )}
     </SafeAreaView>
   );
 }
