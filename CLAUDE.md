@@ -29,7 +29,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-04-23 기준)
+## 현재 구현 상태 (2026-04-25 기준)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -40,11 +40,12 @@ src/
   db/           - database.ts, scheduleDb.ts, routineDb.ts, achievementDb.ts, todoDb.ts
   lib/          - supabase.ts
   store/        - authStore.ts, scheduleStore.ts, routineStore.ts, todoStore.ts
-  utils/        - date.ts, nameTag.ts
+  utils/        - date.ts, nameTag.ts, navigationRef.ts
   screens/      - auth/, account/, schedule/, routine/, todo/, achievement/
   components/   - calendar/MonthCalendar, common/TimeInput, schedule/(LocationSearchModal), routine/, todo/
   navigation/   - AppNavigator.tsx
   theme/        - index.ts
+scripts/        - make-notification-icon.js (알림 아이콘 배경 투명 변환용)
 ```
 → 상세 구조 및 스토어 API: `docs/architecture.md`
 
@@ -83,7 +84,17 @@ src/
 - 채널: `setNotificationChannelAsync('default', ...)` (Android 8+)
 - 모든 트리거에 `channelId: 'default'` 명시
 - 첫 실행 시 구형 알람 일괄 초기화 (`alarm_reset_v1` AsyncStorage 플래그)
-- 알림 아이콘: `assets/notification-icon.png` (투명 배경 + 흰색 실루엣, Android 필수)
+- 알림 아이콘: `assets/notification-icon.png` (보라색 그라데이션 배경 + 흰색 실루엣, 외곽만 투명)
+
+#### 알림 탭 → 화면 이동
+- `src/utils/navigationRef.ts`: `navigationRef`, `navigateToTab`, `setPendingNotifType`, `consumePendingNotifType` 관리
+- **앱 실행 중/백그라운드**: `addNotificationResponseReceivedListener` → `navigateToTab()` 즉시 호출
+- **앱 완전 종료(killed)**: `getLastNotificationResponseAsync()` 결과를 `setPendingNotifType()`으로 저장 → `AppNavigator`에서 auth `loading` 완료 후 `consumePendingNotifType()`으로 처리
+  - 이유: killed 상태에서는 `navigationRef.isReady()`가 false이고 탭 네비게이터도 미마운트 상태이므로 즉시 navigate 불가
+
+#### DB 컬럼명 주의
+- routines 테이블의 주 N회 컬럼명: **`weekly_count`** (snake_case) — JS 객체에서는 `weeklyCount`
+- SQL 쿼리에서 반드시 `weekly_count` 사용, camelCase 혼용 시 SQLite 에러 발생
 
 ---
 
