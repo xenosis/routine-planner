@@ -109,6 +109,7 @@ export async function getRoutineAchievements(
     streak: number;
     frequency: string;
     weekdays: string | null;
+    weekly_count: number | null;
     completedDays: number;
   }>(
     `SELECT
@@ -119,6 +120,7 @@ export async function getRoutineAchievements(
        r.streak,
        r.frequency,
        r.weekdays,
+       r.weekly_count,
        COUNT(rc.id) AS completedDays
      FROM routines r
      LEFT JOIN routine_completions rc
@@ -129,15 +131,24 @@ export async function getRoutineAchievements(
   );
 
   return rows.map((row) => {
-    // createdAt 부터 오늘까지 경과 일수 계산 (포함)
     const created = new Date(row.createdAt);
     const todayDate = new Date(today);
     const diffMs = todayDate.getTime() - created.getTime();
+    const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
-    // weekly_days 루틴은 예정된 횟수 기준으로 달성률 계산
-    const totalDays = (row.frequency === 'weekly_days' && row.weekdays)
-      ? countScheduledOccurrences(row.createdAt, today, JSON.parse(row.weekdays) as number[])
-      : Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1);
+    let totalDays: number;
+    if (row.frequency === 'weekly_days' && row.weekdays) {
+      // 예정 요일 기준: createdAt~today 중 해당 요일 일수
+      totalDays = countScheduledOccurrences(row.createdAt, today, JSON.parse(row.weekdays) as number[]);
+    } else if (row.frequency === 'weekly_count') {
+      // 주 N회: (경과 주 수) × quota
+      const totalWeeks = Math.ceil((diffDays + 1) / 7);
+      const quota = row.weekly_count ?? 1;
+      totalDays = Math.max(1, totalWeeks * quota);
+    } else {
+      // daily: 생성일부터 오늘까지 일수
+      totalDays = diffDays + 1;
+    }
 
     const completedDays = row.completedDays;
     const rate = Math.min(1, completedDays / totalDays);
@@ -237,6 +248,19 @@ export async function getTodayCompletedCount(today: string): Promise<number> {
     [today],
   );
   return row?.count ?? 0;
+}
+
+/**
+ * 오늘 완료한 루틴 ID 목록을 반환한다.
+ * weekly_count quota 달성 루틴 제외 계산에 사용된다.
+ */
+export async function getTodayCompletedRoutineIds(today: string): Promise<string[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ routineId: string }>(
+    'SELECT routineId FROM routine_completions WHERE date = ?',
+    [today],
+  );
+  return rows.map((r) => r.routineId);
 }
 
 /**

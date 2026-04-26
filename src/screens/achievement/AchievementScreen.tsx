@@ -18,7 +18,7 @@ import {
   getMonthlyCompletions,
   getRoutineAchievements,
   getTotalRoutineCount,
-  getTodayCompletedCount,
+  getTodayCompletedRoutineIds,
   getTotalCompletionCount,
   getEarliestRoutineCreatedAt,
   getRoutineScheduleInfo,
@@ -74,16 +74,24 @@ function getThisWeekDays(today: string): string[] {
 
 /**
  * 특정 날짜에 예정된 루틴 수를 계산한다.
- * - daily / weekly_count: 항상 예정
+ * - daily / weekly_count: 항상 예정 (단, quotaMetIds에 포함된 weekly_count는 제외)
  * - weekly_days: 해당 날짜의 요일이 weekdays 배열에 포함될 때만 예정
  * - 루틴 생성일(createdAt) 이후부터만 포함
  */
-function getScheduledCountForDate(date: string, routines: RoutineScheduleInfo[]): number {
+function getScheduledCountForDate(
+  date: string,
+  routines: RoutineScheduleInfo[],
+  quotaMetIds?: Set<string>,
+): number {
   const [y, m, d] = date.split('-').map(Number);
   const weekday = new Date(y, m - 1, d).getDay();
   return routines.filter((r) => {
     if (r.createdAt > date) return false;
-    if (r.frequency === 'daily' || r.frequency === 'weekly_count') return true;
+    if (r.frequency === 'weekly_count') {
+      if (quotaMetIds?.has(r.id)) return false;
+      return true;
+    }
+    if (r.frequency === 'daily') return true;
     if (r.frequency === 'weekly_days') return r.weekdays?.includes(weekday) ?? false;
     return false;
   }).length;
@@ -140,7 +148,7 @@ function useAchievementData() {
 
       // 병렬로 데이터 조회
       const [
-        todayCompleted,
+        todayCompletedIds,
         totalRoutines,
         totalCompletions,
         weeklyCompletions,
@@ -149,7 +157,7 @@ function useAchievementData() {
         earliestRoutineDate,
         routineSchedules,
       ] = await Promise.all([
-        getTodayCompletedCount(today),
+        getTodayCompletedRoutineIds(today),
         getTotalRoutineCount(),
         getTotalCompletionCount(),
         getDailyCompletions(weekStart, today),
@@ -159,8 +167,27 @@ function useAchievementData() {
         getRoutineScheduleInfo(),
       ]);
 
-      // 오늘 예정된 루틴 수 (요일 조건 반영)
-      const todayScheduled = getScheduledCountForDate(today, routineSchedules);
+      const weeklyDoneMap = new Map(weeklyRoutineCompletions.map((r) => [r.routineId, r.count]));
+
+      // "오늘 이전에 이미 quota를 달성한" 루틴 ID 집합
+      // 오늘 체크분(todayCompletedIds)을 제외한 횟수로 판단해야
+      // 오늘 체크로 quota를 채운 경우는 "오늘 완료"로 정상 집계된다
+      const quotaMetBeforeToday = new Set(
+        routineSchedules
+          .filter((r) => {
+            if (r.frequency !== 'weekly_count') return false;
+            const total = weeklyDoneMap.get(r.id) ?? 0;
+            const todayCount = todayCompletedIds.includes(r.id) ? 1 : 0;
+            return (total - todayCount) >= (r.weeklyCount ?? 1);
+          })
+          .map((r) => r.id),
+      );
+
+      // 오늘 예정된 루틴 수 (오늘 이전에 이미 quota 달성한 weekly_count 제외)
+      const todayScheduled = getScheduledCountForDate(today, routineSchedules, quotaMetBeforeToday);
+
+      // 오늘 완료 루틴 수 (오늘 이전 quota 달성 루틴 제외 → 분모와 일관성 유지)
+      const todayCompleted = todayCompletedIds.filter((id) => !quotaMetBeforeToday.has(id)).length;
 
       // routineAchievements에서 최고 스트릭 루틴 도출 (단위 포함)
       const maxStreakRoutine = routineAchievements.reduce<typeof routineAchievements[number] | null>(
@@ -189,14 +216,11 @@ function useAchievementData() {
       // 주간 달성률: 루틴별로 계산 후 평균
       // - daily / weekly_days: 이번 주 예정 일수 대비 완료 일수
       // - weekly_count: min(완료횟수, quota) / quota
-      const routineWeeklyDoneMap = new Map(
-        weeklyRoutineCompletions.map((r) => [r.routineId, r.count]),
-      );
       let weeklyRate = 0;
       const activeRoutines = routineSchedules.filter((r) => r.createdAt <= today);
       if (activeRoutines.length > 0) {
         const rates = activeRoutines.map((routine) => {
-          const done = routineWeeklyDoneMap.get(routine.id) ?? 0;
+          const done = weeklyDoneMap.get(routine.id) ?? 0;
           if (routine.frequency === 'weekly_count') {
             const quota = routine.weeklyCount ?? 1;
             return Math.min(done / quota, 1);
@@ -784,9 +808,9 @@ const RoutineAchievementItem = React.memo(function RoutineAchievementItem({
         style={[itemStyles.progressBar, { backgroundColor: theme.colors.surfaceVariant }]}
       />
 
-      {/* 완료 일수 / 전체 일수 */}
+      {/* 완료 횟수 / 기준 */}
       <Text style={[itemStyles.subText, { color: theme.colors.outline }]}>
-        {item.completedDays}일 완료 / {item.totalDays}일 기준
+        {item.completedDays}{item.frequency === 'weekly_count' ? '회' : '일'} 완료 / {item.totalDays}{item.frequency === 'weekly_count' ? '회' : '일'} 기준
       </Text>
     </View>
   );
