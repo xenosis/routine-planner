@@ -10,6 +10,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import AppNavigator from './src/navigation/AppNavigator';
 import { lightTheme, darkTheme } from './src/theme';
 import { navigationRef, navigateToTab, setPendingNotifType } from './src/utils/navigationRef';
+import { getScheduleById } from './src/db/scheduleDb';
+import { scheduleNextRepeatAlarm } from './src/utils/scheduleAlarms';
 
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
@@ -104,6 +106,16 @@ export default function App(): React.JSX.Element {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const type = response.notification.request.content.data?.type as string | undefined;
       navigateToTab(type);
+
+      // 반복 일정 알람이면 다음 발생일에 알람을 즉시 재등록
+      // 알람 ID 패턴: {scheduleId}_repeat_{index}
+      const identifier = response.notification.request.identifier;
+      if (identifier.includes('_repeat_')) {
+        const scheduleId = identifier.split('_repeat_')[0];
+        getScheduleById(scheduleId).then((schedule) => {
+          if (schedule) scheduleNextRepeatAlarm(schedule).catch(() => {});
+        });
+      }
     });
 
     return () => sub.remove();

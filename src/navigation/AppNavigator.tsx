@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, useTheme } from 'react-native-paper';
 import { Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 
 import ScheduleScreen from '../screens/schedule/ScheduleScreen';
 import RoutineScreen from '../screens/routine/RoutineScreen';
@@ -13,6 +14,8 @@ import AccountScreen from '../screens/account/AccountScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import { useAuthStore } from '../store/authStore';
 import { consumePendingNotifType, navigateToTab } from '../utils/navigationRef';
+import { getRepeatSchedulesWithAlarm } from '../db/scheduleDb';
+import { scheduleNextRepeatAlarm } from '../utils/scheduleAlarms';
 
 export type RootTabParamList = {
   Schedule: undefined;
@@ -42,6 +45,28 @@ const TAB_LABELS: Record<keyof RootTabParamList, string> = {
   Account: '계정',
 };
 
+// 앱 시작 시 반복 알람 누락 체크 및 재등록
+// 앱이 오랫동안 종료된 경우 예약된 반복 알람이 사라졌을 수 있으므로 보완 등록
+async function reRegisterMissingRepeatAlarms(): Promise<void> {
+  try {
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    const scheduledIds = new Set(scheduled.map((n) => n.identifier));
+
+    const repeatSchedules = await getRepeatSchedulesWithAlarm().catch(() => []);
+    for (const schedule of repeatSchedules) {
+      // 이 일정의 반복 알람 식별자가 하나도 예약되어 있지 않은 경우 재등록
+      const hasAlarm = schedule.alarmTimes?.some((_, i) =>
+        scheduledIds.has(`${schedule.id}_repeat_${i}`),
+      );
+      if (!hasAlarm) {
+        await scheduleNextRepeatAlarm(schedule).catch(() => {});
+      }
+    }
+  } catch {
+    // 알람 재등록 실패 시 조용히 무시
+  }
+}
+
 export default function AppNavigator(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -58,6 +83,13 @@ export default function AppNavigator(): React.JSX.Element {
       if (type) navigateToTab(type);
     }
   }, [loading]);
+
+  // 로그인 완료 후 반복 알람 누락 체크 — 앱이 종료된 사이 발생했을 반복 알람을 재등록
+  useEffect(() => {
+    if (!loading && session) {
+      reRegisterMissingRepeatAlarms();
+    }
+  }, [loading, session]);
 
   if (loading) {
     return (

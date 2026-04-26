@@ -39,7 +39,7 @@ Paper v5 `mode="outlined"` label은 `value !== '' || focused` 일 때만 상단 
 ```tsx
 <TextInput
   label="장소"
-  value={location || ' '}           // 빈 값이면 스페이스(truthy) → label 항상 float
+  value={location}      // 빈 값이면 스페이스(truthy) → label 항상 float
   onChangeText={(v) => setLocation(v.trimStart())}  // 앞 공백 자동 제거
   placeholder="장소 검색"
   mode="outlined"

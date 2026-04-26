@@ -11,6 +11,7 @@ import {
   updateSchedule as dbUpdateSchedule,
   deleteSchedule as dbDeleteSchedule,
 } from '../db/scheduleDb';
+import { cancelRepeatAlarms } from '../utils/scheduleAlarms';
 
 export type { Schedule } from '../db/scheduleDb';
 import type { Schedule } from '../db/scheduleDb';
@@ -161,13 +162,14 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
   // ── 수정 ───────────────────────────────
 
   updateSchedule: async (schedule: Schedule) => {
-    // 수정 전: 기존 알람 전부 취소 (구형 단일 + 신형 복수 모두)
+    // 수정 전: 기존 알람 전부 취소 (구형 단일 + 신형 복수 + 반복 알람)
     const existing = get().schedules.find((s) => s.id === schedule.id);
     await Notifications.cancelScheduledNotificationAsync(schedule.id).catch(() => {});
     const existingAlarmCount = existing?.alarmTimes?.length ?? 0;
     for (let i = 0; i < existingAlarmCount; i++) {
       await Notifications.cancelScheduledNotificationAsync(`${schedule.id}_${i}`).catch(() => {});
     }
+    await cancelRepeatAlarms(schedule.id, existingAlarmCount);
 
     await dbUpdateSchedule(schedule);
 
@@ -195,6 +197,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     for (let i = 0; i < alarmCount; i++) {
       await Notifications.cancelScheduledNotificationAsync(`${id}_${i}`).catch(() => {});
     }
+    // 반복 알람 취소: {id}_repeat_{index} 패턴
+    await cancelRepeatAlarms(id, alarmCount);
 
     await dbDeleteSchedule(id);
 

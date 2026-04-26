@@ -33,7 +33,10 @@ export default function ScheduleItem({
       const dateRange = `${sm}/${sd} ~ ${em}/${ed}`;
       return hasTime ? `${dateRange} · ${schedule.startTime} ~ ${schedule.endTime}` : dateRange;
     }
-    return hasTime ? `${schedule.startTime} ~ ${schedule.endTime}` : null;
+    if (!hasTime) return null;
+    // 시작·종료가 같으면 단일 시각만 표시 (반복 일정 알람 시각 등)
+    if (schedule.startTime === schedule.endTime) return schedule.startTime;
+    return `${schedule.startTime} ~ ${schedule.endTime}`;
   })();
 
   return (

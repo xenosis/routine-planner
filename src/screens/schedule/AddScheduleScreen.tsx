@@ -20,12 +20,16 @@ import {
 } from 'react-native-paper';
 import TimeInput from '../../components/common/TimeInput';
 import LocationSearchModal from '../../components/schedule/LocationSearchModal';
-import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import type { Schedule } from '../../db/scheduleDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
 import { useAuthStore } from '../../store/authStore';
+import {
+  scheduleAlarmNotifications,
+  scheduleNextRepeatAlarm,
+  formatAlarmTime,
+} from '../../utils/scheduleAlarms';
 
 // 카테고리별 대표 색상
 export const CATEGORY_COLORS: Record<Schedule['category'], string> = {
@@ -62,24 +66,13 @@ const CATEGORY_OPTIONS: Array<{ value: Schedule['category']; label: string }> = 
   { value: '기타', label: '기타' },
 ];
 
-/**
- * 분 단위를 사람이 읽기 쉬운 문자열로 변환한다.
- * 예: 10 → "10분 전", 60 → "1시간 전", 1440 → "1일 전"
- */
-function formatAlarmTime(minutes: number): string {
-  if (minutes === 0) return '마감 시각';
-  if (minutes < 60) return `${minutes}분 전`;
-  if (minutes < 1440) {
-    const h = minutes / 60;
-    return `${h === Math.floor(h) ? Math.floor(h) : h.toFixed(1)}시간 전`;
-  }
-  if (minutes < 10080) {
-    const d = minutes / 1440;
-    return `${d === Math.floor(d) ? Math.floor(d) : d.toFixed(1)}일 전`;
-  }
-  const w = minutes / 10080;
-  return `${w === Math.floor(w) ? Math.floor(w) : w.toFixed(1)}주 전`;
-}
+// 반복 옵션 목록
+const REPEAT_OPTIONS: Array<{ value: NonNullable<Schedule['repeat']>; label: string }> = [
+  { value: 'daily', label: '매일' },
+  { value: 'weekly', label: '매주' },
+  { value: 'monthly', label: '매월' },
+  { value: 'yearly', label: '매년' },
+];
 
 interface AddScheduleScreenProps {
   visible: boolean;
@@ -93,61 +86,6 @@ interface AddScheduleScreenProps {
 // 새 일정용 고유 ID 생성
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2);
-}
-
-/**
- * 복수 알람 예약 함수.
- * alarmTimes 배열의 각 항목에 대해 개별 알람을 {scheduleId}_{index} 식별자로 등록한다.
- */
-async function scheduleAlarmNotifications(schedule: Schedule): Promise<void> {
-  if (!schedule.alarm || !schedule.alarmTimes?.length) return;
-
-  try {
-    // 알람 권한 확인
-    const { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') {
-      const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      if (newStatus !== 'granted') return;
-    }
-
-    const [year, month, day] = schedule.date.split('-').map(Number);
-    const [hour, minute] = schedule.startTime.split(':').map(Number);
-
-    // 수정 모드: 기존 알람을 전부 취소한 후 재등록
-    // 구형 단일 알람 ID 취소
-    await Notifications.cancelScheduledNotificationAsync(schedule.id).catch(() => {});
-    // 신형 복수 알람 ID 취소 (최대 20개까지 시도)
-    for (let i = 0; i < 20; i++) {
-      await Notifications.cancelScheduledNotificationAsync(`${schedule.id}_${i}`).catch(() => {});
-    }
-
-    // 각 알람 시간마다 개별 알람 등록
-    for (let i = 0; i < schedule.alarmTimes.length; i++) {
-      const mins = schedule.alarmTimes[i];
-      const triggerDate = new Date(year, month - 1, day, hour, minute);
-      triggerDate.setMinutes(triggerDate.getMinutes() - mins);
-
-      // 과거 시각이면 건너뜀
-      if (triggerDate <= new Date()) continue;
-
-      await Notifications.scheduleNotificationAsync({
-        identifier: `${schedule.id}_${i}`,
-        content: {
-          title: schedule.title,
-          body: mins === 0 ? '지금 일정이 시작됩니다' : `${formatAlarmTime(mins)} 일정이 있습니다`,
-          data: { type: 'schedule' },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: triggerDate,
-          channelId: 'default',
-        },
-      });
-    }
-  } catch (e) {
-    // 알람 예약 실패 시 조용히 무시 (UI 블로킹 방지)
-    console.warn('알람 예약 실패:', e);
-  }
 }
 
 export default function AddScheduleScreen({
@@ -176,6 +114,23 @@ export default function AddScheduleScreen({
   const [nameTagColor, setNameTagColor] = useState(() => schedule ? (schedule.nameTagColor ?? '') : nameColor);
   const [memo, setMemo] = useState(() => schedule?.memo ?? '');
   const [alarmEnabled, setAlarmEnabled] = useState(() => schedule?.alarm ?? false);
+
+  // 반복 설정 상태
+  const [repeatEnabled, setRepeatEnabled] = useState(() => !!schedule?.repeat);
+  const [repeat, setRepeat] = useState<Schedule['repeat']>(() => schedule?.repeat);
+  const [repeatUntil, setRepeatUntil] = useState(() => schedule?.repeatUntil ?? '');
+  const [showRepeatUntilPicker, setShowRepeatUntilPicker] = useState(false);
+  // 테스트용 분 단위 반복
+  const [isMinutesModeActive, setIsMinutesModeActive] = useState(
+    () => !!schedule?.repeat?.startsWith('minutes:'),
+  );
+  const [minutesInput, setMinutesInput] = useState(() =>
+    schedule?.repeat?.startsWith('minutes:') ? schedule.repeat.split(':')[1] : '',
+  );
+  // 반복 알람 시각 (반복 일정의 실제 알람 트리거 시각, 비반복의 startTime과 독립)
+  const [repeatAlarmTime, setRepeatAlarmTime] = useState(() =>
+    schedule?.repeat ? (schedule.startTime ?? '') : '',
+  );
 
   // UI 상태
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -234,44 +189,57 @@ export default function AddScheduleScreen({
 
   // 저장 처리
   const isTimeValid =
+    repeatEnabled ||
     (!startTime && !endTime) || (!!startTime && !!endTime && endTime >= startTime);
   const isDateValid = endDate >= date;
   const canSetAlarm = !!startTime && !!endTime;
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) return;
-    if (startTime && endTime && endTime < startTime) return;
+    if (!repeatEnabled && startTime && endTime && endTime < startTime) return;
     if (endDate < date) return;
 
-    // alarm 필드: 알람 활성화 AND 알람이 하나 이상 등록된 경우만 true
-    const hasAlarm = alarmEnabled && alarmTimes.length > 0;
+    // 반복 일정: 알람 시각(repeatAlarmTime)을 startTime으로 사용, alarmTimes=[0]으로 고정
+    const isRepeatActive = repeatEnabled && !!(repeat);
+    const effectiveStartTime = isRepeatActive ? (repeatAlarmTime || '09:00') : startTime;
+    const effectiveEndTime = isRepeatActive ? (repeatAlarmTime || '09:00') : endTime;
+    const hasRepeatAlarm = isRepeatActive && !!repeatAlarmTime;
+    const hasAlarm = hasRepeatAlarm || (!repeatEnabled && alarmEnabled && alarmTimes.length > 0);
 
     const newSchedule: Schedule = {
       id: schedule?.id ?? generateId(),
       title: title.trim(),
       date,
       endDate: endDate !== date ? endDate : undefined,
-      startTime,
-      endTime,
+      startTime: effectiveStartTime,
+      endTime: effectiveEndTime,
       category,
       color: nameTagColor || CATEGORY_COLORS[category],
       memo: memo.trim() || undefined,
       alarm: hasAlarm,
-      alarmTimes: hasAlarm ? alarmTimes : undefined,
+      alarmTimes: hasRepeatAlarm ? [0] : (hasAlarm ? alarmTimes : undefined),
       location: location.trim() || undefined,
       nameTag: nameTag.trim() || undefined,
       nameTagColor: nameTag.trim() ? (nameTagColor || undefined) : undefined,
+      repeat: repeat ?? undefined,
+      repeatUntil: repeatUntil || undefined,
     };
 
-    // 알람 예약 (추가 또는 수정 시 모두 처리)
-    if (newSchedule.alarm && newSchedule.alarmTimes?.length) {
-      await scheduleAlarmNotifications(newSchedule);
-    }
+    // onSave 먼저 호출 (store.updateSchedule이 기존 알람을 취소하므로, 반드시 완료 후 새 알람 등록)
+    await (onSave(newSchedule) as unknown as Promise<void> | void);
 
-    onSave(newSchedule);
+    // 알람 예약: 반복이면 다음 발생일 1회, 비반복이면 복수 알람 등록
+    if (newSchedule.alarm && newSchedule.alarmTimes?.length) {
+      if (newSchedule.repeat) {
+        await scheduleNextRepeatAlarm(newSchedule).catch(() => {});
+      } else {
+        await scheduleAlarmNotifications(newSchedule);
+      }
+    }
   }, [
-    title, date, startTime, endTime, category,
-    location, nameTag, nameTagColor, memo, alarmEnabled, alarmTimes, schedule, onSave,
+    title, date, endDate, startTime, endTime, category,
+    location, nameTag, nameTagColor, memo, alarmEnabled, alarmTimes,
+    repeat, repeatUntil, repeatEnabled, repeatAlarmTime, isMinutesModeActive, schedule, onSave,
   ]);
 
   const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid;
@@ -362,10 +330,17 @@ export default function AddScheduleScreen({
                 setEndDate(v);
                 if (v.length === 10) {
                   if (v !== date) {
+                    // 다일 일정으로 변경: 시각·알람·반복 초기화
                     setStartTime('');
                     setEndTime('');
                     setAlarmEnabled(false);
                     setAlarmTimes([]);
+                    setRepeatEnabled(false);
+                    setRepeat(undefined);
+                    setRepeatUntil('');
+                    setMinutesInput('');
+                    setIsMinutesModeActive(false);
+                    setRepeatAlarmTime('');
                   } else {
                     if (!startTime) setStartTime('09:00');
                     if (!endTime) setEndTime('10:00');
@@ -494,11 +469,17 @@ export default function AddScheduleScreen({
                   } else {
                     setEndDate(d);
                     if (d !== date) {
-                      // 단일→다일: 시각 초기화 + 알람 해제
+                      // 단일→다일: 시각 초기화 + 알람·반복 해제
                       setStartTime('');
                       setEndTime('');
                       setAlarmEnabled(false);
                       setAlarmTimes([]);
+                      setRepeatEnabled(false);
+                      setRepeat(undefined);
+                      setRepeatUntil('');
+                      setMinutesInput('');
+                      setIsMinutesModeActive(false);
+                      setRepeatAlarmTime('');
                     } else {
                       // 다일→단일: 시각 복구
                       if (!startTime) setStartTime('09:00');
@@ -564,6 +545,155 @@ export default function AddScheduleScreen({
             maxLength={300}
           />
 
+          {/* ── 반복 설정 — 단일 날짜 일정에서만 표시 ─────── */}
+          {date === endDate && (
+            <>
+              <Divider style={styles.divider} />
+              {/* 반복 토글 행 */}
+              <View style={styles.alarmRow}>
+                <View style={styles.alarmLabelGroup}>
+                  <Text style={[styles.alarmLabel, { color: theme.colors.onSurface }]}>반복</Text>
+                  <Text style={[styles.alarmSub, { color: theme.colors.onSurfaceVariant }]}>
+                    {repeatEnabled && repeat
+                      ? isMinutesModeActive
+                        ? `${minutesInput}분마다 반복`
+                        : `${REPEAT_OPTIONS.find((o) => o.value === repeat)?.label} 반복`
+                      : '반복 일정 설정'}
+                  </Text>
+                </View>
+                <Switch
+                  value={repeatEnabled}
+                  onValueChange={(val) => {
+                    setRepeatEnabled(val);
+                    if (!val) {
+                      setRepeat(undefined);
+                      setRepeatUntil('');
+                      setMinutesInput('');
+                      setIsMinutesModeActive(false);
+                      setRepeatAlarmTime('');
+                      setShowRepeatUntilPicker(false);
+                    }
+                  }}
+                  color={theme.colors.primary}
+                />
+              </View>
+
+              {/* 반복 상세 영역 (토글 켰을 때만 표시) */}
+              {repeatEnabled && (
+                <View style={styles.repeatSection}>
+                  <View style={styles.repeatChipRow}>
+                    {REPEAT_OPTIONS.map((opt) => (
+                      <Chip
+                        key={opt.value}
+                        mode={repeat === opt.value ? 'flat' : 'outlined'}
+                        selected={repeat === opt.value}
+                        onPress={() => {
+                          setRepeat((prev) => prev === opt.value ? undefined : opt.value);
+                          setIsMinutesModeActive(false);
+                          setMinutesInput('');
+                        }}
+                        compact
+                        style={styles.repeatChip}
+                      >
+                        {opt.label}
+                      </Chip>
+                    ))}
+                    {/* 테스트용: 분 단위 반복 */}
+                    <Chip
+                      mode={isMinutesModeActive ? 'flat' : 'outlined'}
+                      selected={isMinutesModeActive}
+                      onPress={() => {
+                        if (isMinutesModeActive) {
+                          // 분 모드 해제
+                          setIsMinutesModeActive(false);
+                          setRepeat(undefined);
+                          setMinutesInput('');
+                        } else {
+                          // 분 모드 진입 (다른 반복 선택 해제)
+                          setIsMinutesModeActive(true);
+                          setRepeat(undefined);
+                          setMinutesInput('');
+                        }
+                      }}
+                      compact
+                      style={styles.repeatChip}
+                    >
+                      N분마다
+                    </Chip>
+                  </View>
+
+                  {/* 분 단위 입력 (N분마다 선택 시) */}
+                  {isMinutesModeActive && (
+                    <TextInput
+                      label="반복 간격 (분)"
+                      value={minutesInput}
+                      onChangeText={(v) => {
+                        setMinutesInput(v);
+                        const num = parseInt(v, 10);
+                        if (num > 0) setRepeat(`minutes:${num}`);
+                        else setRepeat(undefined);
+                      }}
+                      mode="outlined"
+                      keyboardType="numeric"
+                      style={styles.repeatUntilInput}
+                      placeholder="예: 5"
+                      maxLength={4}
+                    />
+                  )}
+
+                  {/* 알람 시각 + 반복 종료일 — 한 줄 2분할 */}
+                  {(repeat || isMinutesModeActive) && (
+                    <View>
+                      <View style={styles.repeatTimeRow}>
+                        <TimeInput
+                          label={isMinutesModeActive ? '기준 시각' : '알람 시각'}
+                          value={repeatAlarmTime}
+                          onChange={setRepeatAlarmTime}
+                          compact
+                          style={styles.repeatHalfInput}
+                        />
+                        {repeat && !isMinutesModeActive && (
+                          <TextInput
+                            label="종료일 (선택)"
+                            value={repeatUntil}
+                            onChangeText={setRepeatUntil}
+                            mode="outlined"
+                            style={styles.repeatHalfInput}
+                            placeholder="없으면 무한"
+                            keyboardType="numeric"
+                            maxLength={10}
+                            right={
+                              <TextInput.Icon
+                                icon={showRepeatUntilPicker ? 'calendar-check' : 'calendar'}
+                                onPress={() => setShowRepeatUntilPicker((v) => !v)}
+                              />
+                            }
+                          />
+                        )}
+                      </View>
+                      {showRepeatUntilPicker && (
+                        <View style={[styles.inlineDatePicker, { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.colors.outlineVariant }]}>
+                          <MonthCalendar
+                            selectedDate={repeatUntil || date}
+                            markedDates={{}}
+                            onDateSelect={(d) => {
+                              setRepeatUntil(d);
+                              setShowRepeatUntilPicker(false);
+                            }}
+                            onMonthChange={() => {}}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
+          )}
+
+          {/* 반복 활성 시 알람 섹션 숨김 (반복 섹션에서 알람 시각 직접 설정) */}
+          {!repeatEnabled && (
+          <>
           <Divider style={styles.divider} />
 
           {/* ── 알람 섹션 ────────────────────────── */}
@@ -735,6 +865,8 @@ export default function AddScheduleScreen({
                 </View>
               )}
             </View>
+          )}
+          </>
           )}
 
           {/* 하단 여백 (저장 버튼 가림 방지) */}
@@ -915,6 +1047,36 @@ const styles = StyleSheet.create({
 
   divider: {
     marginVertical: spacing.sm,
+  },
+
+  // ── 반복 섹션 스타일 ──────────────────────────
+
+  repeatSection: {
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  repeatLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  repeatChipRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  repeatChip: {
+    marginBottom: 0,
+  },
+  repeatUntilRow: {
+    gap: spacing.xs,
+  },
+  repeatUntilInput: {},
+  repeatTimeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  repeatHalfInput: {
+    flex: 1,
   },
 
   // ── 알람 섹션 스타일 ──────────────────────────

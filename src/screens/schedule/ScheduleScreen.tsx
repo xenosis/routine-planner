@@ -66,7 +66,7 @@ function buildListItems(schedules: Schedule[]): ListItem[] {
       items.push({ kind: 'separator', dateStr: s.date, key: `sep-${s.date}` });
       lastDate = s.date;
     }
-    items.push({ kind: 'schedule', schedule: s, key: s.id });
+    items.push({ kind: 'schedule', schedule: s, key: `${s.id}_${s.date}` });
   }
   return items;
 }
