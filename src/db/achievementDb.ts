@@ -239,6 +239,21 @@ export async function getWeeklyCompletionsByRoutine(
 }
 
 /**
+ * 특정 날짜 범위의 (routineId, date) 쌍을 모두 반환한다.
+ * 월간 달력에서 주별 weekly_count quota 상태를 계산하는 데 사용된다.
+ */
+export async function getRoutineCompletionsInRange(
+  startDate: string,
+  endDate: string,
+): Promise<{ routineId: string; date: string }[]> {
+  const db = await getDb();
+  return db.getAllAsync<{ routineId: string; date: string }>(
+    `SELECT routineId, date FROM routine_completions WHERE date BETWEEN ? AND ? ORDER BY date ASC`,
+    [startDate, endDate],
+  );
+}
+
+/**
  * 오늘 완료한 루틴 수를 반환한다.
  */
 export async function getTodayCompletedCount(today: string): Promise<number> {

@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  BackHandler,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,6 +13,7 @@ import {
   Chip,
   Divider,
   IconButton,
+  Portal,
   Switch,
   Text,
   TextInput,
@@ -144,6 +145,25 @@ export default function AddScheduleScreen({
   const [customValue, setCustomValue] = useState('');
   const [customUnit, setCustomUnit] = useState<TimeUnit>('min');
 
+  // Paper TextInput label 즉시 표시 트릭:
+  // 값이 있는 필드는 measured=false일 때 label opacity=0으로 숨겨짐.
+  // 첫 프레임에 value=""로 렌더하면 label opacity=1 → onLayout이 실제 치수로 fire → measured=true.
+  // 다음 프레임에 실제 값을 보여주면 label이 바로 올라옴 (180ms 애니메이션만 플레이).
+  const [labelsReady, setLabelsReady] = useState(false);
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => setLabelsReady(true));
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  // 안드로이드 뒤로가기 버튼 처리 (Portal은 Modal과 달리 onRequestClose가 없음)
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [onClose]);
+
   // 알람 토글 핸들러
   const handleAlarmToggle = useCallback((val: boolean) => {
     setAlarmEnabled(val);
@@ -245,13 +265,10 @@ export default function AddScheduleScreen({
   const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
+    <Portal>
+      <View style={[styles.overlay, { backgroundColor: theme.colors.background }]}>
       <KeyboardAvoidingView
-        style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}
+        style={[styles.root, { paddingTop: insets.top }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* 상단 헤더 */}
@@ -286,7 +303,7 @@ export default function AddScheduleScreen({
           {/* 제목 */}
           <TextInput
             label="제목 *"
-            value={title}
+            value={labelsReady ? title : ''}
             onChangeText={setTitle}
             mode="outlined"
             style={styles.input}
@@ -299,7 +316,7 @@ export default function AddScheduleScreen({
           <View style={styles.dateTimeRow}>
             <TextInput
               label="시작일"
-              value={date}
+              value={labelsReady ? date : ''}
               onChangeText={(v) => {
                 setDate(v);
                 // 종료일이 시작일보다 앞서면 맞춤
@@ -325,7 +342,7 @@ export default function AddScheduleScreen({
             </Text>
             <TextInput
               label="종료일"
-              value={endDate}
+              value={labelsReady ? endDate : ''}
               onChangeText={(v) => {
                 setEndDate(v);
                 if (v.length === 10) {
@@ -368,7 +385,7 @@ export default function AddScheduleScreen({
           <View style={[styles.timeRow, showCategoryMenu && { zIndex: 10 }]}>
             <TimeInput
               label="시작"
-              value={startTime}
+              value={labelsReady ? startTime : ''}
               onChange={setStartTime}
               compact
               style={styles.timeInput}
@@ -378,7 +395,7 @@ export default function AddScheduleScreen({
             </Text>
             <TimeInput
               label="종료"
-              value={endTime}
+              value={labelsReady ? endTime : ''}
               onChange={setEndTime}
               compact
               style={styles.timeInput}
@@ -388,7 +405,7 @@ export default function AddScheduleScreen({
               <View pointerEvents="none">
                 <TextInput
                   label="카테고리"
-                  value={category}
+                  value={labelsReady ? category : ''}
                   mode="outlined"
                   editable={false}
                   style={styles.categoryInput}
@@ -497,7 +514,7 @@ export default function AddScheduleScreen({
           <View style={styles.doubleRow}>
             <TextInput
               label="장소"
-              value={location}
+              value={labelsReady ? location : ''}
               onChangeText={(v) => setLocation(v.trimStart())}
               mode="outlined"
               style={styles.halfInput}
@@ -509,7 +526,7 @@ export default function AddScheduleScreen({
             />
             <TextInput
               label="작성자"
-              value={nameTag}
+              value={labelsReady ? nameTag : ''}
               onChangeText={setNameTag}
               mode="outlined"
               style={styles.halfInput}
@@ -534,7 +551,7 @@ export default function AddScheduleScreen({
           {/* 메모 — 내용이 길면 자동으로 높이 확장 (scrollEnabled=false) */}
           <TextInput
             label="메모 (선택)"
-            value={memo}
+            value={labelsReady ? memo : ''}
             onChangeText={(v) => setMemo(v.trimStart())}
             mode="outlined"
             style={[styles.input, styles.memoInput]}
@@ -626,7 +643,7 @@ export default function AddScheduleScreen({
                   {isMinutesModeActive && (
                     <TextInput
                       label="반복 간격 (분)"
-                      value={minutesInput}
+                      value={labelsReady ? minutesInput : ''}
                       onChangeText={(v) => {
                         setMinutesInput(v);
                         const num = parseInt(v, 10);
@@ -655,7 +672,7 @@ export default function AddScheduleScreen({
                         {repeat && !isMinutesModeActive && (
                           <TextInput
                             label="종료일 (선택)"
-                            value={repeatUntil}
+                            value={labelsReady ? repeatUntil : ''}
                             onChangeText={setRepeatUntil}
                             mode="outlined"
                             style={styles.repeatHalfInput}
@@ -910,11 +927,16 @@ export default function AddScheduleScreen({
           </View>
         </View>
       </KeyboardAvoidingView>
-    </Modal>
+      </View>
+    </Portal>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
   root: {
     flex: 1,
   },

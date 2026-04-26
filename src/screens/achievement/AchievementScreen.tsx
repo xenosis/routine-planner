@@ -15,7 +15,6 @@ import { Calendar } from 'react-native-calendars';
 import { initDatabase } from '../../db/database';
 import {
   getDailyCompletions,
-  getMonthlyCompletions,
   getRoutineAchievements,
   getTotalRoutineCount,
   getTodayCompletedRoutineIds,
@@ -23,8 +22,8 @@ import {
   getEarliestRoutineCreatedAt,
   getRoutineScheduleInfo,
   getWeeklyCompletionsByRoutine,
+  getRoutineCompletionsInRange,
   type RoutineAchievementRow,
-  type DailyCompletionRow,
   type RoutineScheduleInfo,
 } from '../../db/achievementDb';
 import { borderRadius, spacing } from '../../theme';
@@ -57,6 +56,16 @@ function getDayLabel(dateStr: string): string {
   const [y, mo, d] = dateStr.split('-').map(Number);
   const date = new Date(y, mo - 1, d);
   return ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+}
+
+/** 날짜 문자열의 월요일(주 시작일) 반환 */
+function getWeekStart(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dow = date.getDay();
+  const daysFromMon = dow === 0 ? 6 : dow - 1;
+  const mon = new Date(y, m - 1, d - daysFromMon);
+  return `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
 }
 
 /** 이번 주 월요일 ~ 오늘까지의 날짜 문자열 배열 반환 (1~7일) */
@@ -198,13 +207,20 @@ function useAchievementData() {
       const maxStreakUnit = maxStreakRoutine?.frequency === 'weekly_count' ? '주' : '일';
 
       // 주간 차트: 각 날짜별로 "그날 예정된 루틴 수"를 분모로 사용
+      // weekly_count 중 이번 주 quota 달성한 루틴은 분모에서 제외
+      const quotaMetForWeek = new Set(
+        routineSchedules
+          .filter((r) => r.frequency === 'weekly_count' && (weeklyDoneMap.get(r.id) ?? 0) >= (r.weeklyCount ?? 1))
+          .map((r) => r.id),
+      );
+
       const completionMap = new Map<string, number>(
         weeklyCompletions.map((r) => [r.date, r.completedCount]),
       );
       const weeklyChartData = thisWeekDays.map((date) => {
         const completed = completionMap.get(date) ?? 0;
-        const scheduled = getScheduledCountForDate(date, routineSchedules);
-        const rate = scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
+        const scheduled = getScheduledCountForDate(date, routineSchedules, quotaMetForWeek);
+        const rate = scheduled > 0 ? Math.min(Math.round((completed / scheduled) * 100), 100) : 0;
         return {
           label: getDayLabel(date),
           value: rate,
@@ -278,12 +294,24 @@ function buildMarkedDates(
   month: number,
   today: string,
   routineSchedules: RoutineScheduleInfo[],
-  monthlyCompletions: DailyCompletionRow[],
+  routineCompletions: { routineId: string; date: string }[],
   earliestRoutineDate: string,
 ): MarkedDates {
-  const monthCompletionMap = new Map<string, number>(
-    monthlyCompletions.map((r) => [r.date, r.completedCount]),
-  );
+  // 날짜별 완료 루틴 ID 집합
+  const completionsByDate = new Map<string, Set<string>>();
+  // 주 시작일 → 루틴 ID → 해당 주 완료 날짜 목록 (quota 누적 계산용)
+  const weekRoutineDates = new Map<string, Map<string, string[]>>();
+
+  for (const { routineId, date } of routineCompletions) {
+    if (!completionsByDate.has(date)) completionsByDate.set(date, new Set());
+    completionsByDate.get(date)!.add(routineId);
+
+    const ws = getWeekStart(date);
+    if (!weekRoutineDates.has(ws)) weekRoutineDates.set(ws, new Map());
+    const wMap = weekRoutineDates.get(ws)!;
+    if (!wMap.has(routineId)) wMap.set(routineId, []);
+    wMap.get(routineId)!.push(date);
+  }
 
   const markedDates: MarkedDates = {};
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -293,19 +321,29 @@ function buildMarkedDates(
     const dayStr = String(day).padStart(2, '0');
     const dateKey = `${year}-${monthStr}-${dayStr}`;
 
-    // 미래 날짜는 마킹 제외
     if (dateKey > today) break;
-
-    // 루틴 추가 이전 날짜는 마킹 제외
     if (dateKey < earliestRoutineDate) continue;
 
-    // 해당 날짜에 예정된 루틴 수 계산 (weekly_days 요일 조건 반영)
-    const scheduled = getScheduledCountForDate(dateKey, routineSchedules);
+    // 이 날 이전에 이미 quota를 달성한 weekly_count 루틴 집합
+    const ws = getWeekStart(dateKey);
+    const wMap = weekRoutineDates.get(ws) ?? new Map<string, string[]>();
+    const quotaMetBeforeThisDay = new Set(
+      routineSchedules
+        .filter((r) => {
+          if (r.frequency !== 'weekly_count') return false;
+          const dates = wMap.get(r.id) ?? [];
+          return dates.filter((d) => d < dateKey).length >= (r.weeklyCount ?? 1);
+        })
+        .map((r) => r.id),
+    );
 
-    // 예정 루틴 없는 날은 마킹 제외
+    const scheduled = getScheduledCountForDate(dateKey, routineSchedules, quotaMetBeforeThisDay);
     if (scheduled === 0) continue;
 
-    const completed = monthCompletionMap.get(dateKey) ?? 0;
+    // quota 이미 달성된 weekly_count 완료분은 제외하고 카운트
+    const routineIdsOnDay = completionsByDate.get(dateKey) ?? new Set<string>();
+    const completed = [...routineIdsOnDay].filter((id) => !quotaMetBeforeThisDay.has(id)).length;
+
     const isFullyDone = completed >= scheduled;
     markedDates[dateKey] = {
       marked: true,
@@ -313,7 +351,6 @@ function buildMarkedDates(
     };
   }
 
-  // 오늘 날짜는 선택 상태로 추가 표시
   markedDates[today] = {
     ...(markedDates[today] ?? {}),
     selected: true,
@@ -633,9 +670,13 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
   // 표시 월 변경 시 해당 달 데이터 재조회
   useEffect(() => {
     let cancelled = false;
-    getMonthlyCompletions(viewYear, viewMonth).then((completions) => {
+    const monthStr = String(viewMonth).padStart(2, '0');
+    const startDate = `${viewYear}-${monthStr}-01`;
+    const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
+    const endDate = `${viewYear}-${monthStr}-${String(daysInMonth).padStart(2, '0')}`;
+    getRoutineCompletionsInRange(startDate, endDate <= today ? endDate : today).then((routineCompletions) => {
       if (!cancelled) {
-        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, routineSchedules, completions, earliestRoutineDate));
+        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, routineSchedules, routineCompletions, earliestRoutineDate));
       }
     });
     return () => { cancelled = true; };
