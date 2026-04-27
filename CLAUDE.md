@@ -24,17 +24,20 @@
 - 모던하고 세련된 UI, 다크모드 지원, 미니멀
 - SafeArea: `edges={['top', 'left', 'right']}` (하단은 탭 바가 처리)
 - 모달 footer: `paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm`
-- Paper TextInput label float: `value={field || ' '}` + `onChangeText={(v) => setter(v.trimStart())}`
-  - **주의**: multiline 메모 필드 및 `nameTag` 등 일반 단일행 필드에도 `|| ' '` 트릭 사용 금지 → 한글 입력 버그
-  - 메모 필드: `value={memo}` + `scrollEnabled={false}`
-- Paper TextInput label 딜레이 버그: **`labelsReady` 패턴**으로 해결
+- Paper TextInput 한글 입력 규칙
+  - **절대 금지**: `value={field || ' '}` — 한글 자모 분리 버그
+  - **절대 금지**: `value={labelsReady ? field : ''}` (한글 입력 필드에) — `''` 폴백이 IME composition 파괴
+  - **한글 입력 필드** (title, memo, location, nameTag 등): 반드시 `value={field}` 직접 사용
+  - **메모 multiline**: `value={memo}` + `scrollEnabled={false}`
+- Paper TextInput label 딜레이 버그: **`labelsReady` 패턴** (날짜·시각·카테고리 등 비한글 필드에만)
   ```tsx
   const [labelsReady, setLabelsReady] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setLabelsReady(true));
     return () => cancelAnimationFrame(id);
   }, []);
-  // 각 TextInput: value={labelsReady ? field : ''}
+  // 날짜·숫자 등 비한글 TextInput에만: value={labelsReady ? field : ''}
+  // 한글 TextInput에는 절대 사용 금지 — value={field} 직접 사용
   ```
   - 전제: 부모 **조건부 렌더링** (`{visible && <Screen />}`) + 자식 **`useState(() => prop?.value ?? '')`**
   - `AddScheduleScreen`은 `Portal` 기반 전체화면 (ScheduleScreen에서 `{modalVisible && <AddScheduleScreen />}`)
@@ -75,7 +78,7 @@ scripts/    - make-notification-icon.js
 - **성과탭 월간/루틴별**: `quotaMetBeforeThisDay` 집합으로 weekly_count quota 달성 루틴 분모 제외
 - **루틴 탭 오늘 목록**: `weekly_count` quota 달성 AND 오늘 미체크 시 목록·카운트에서 제외
 - **Android 알람**: 반복 알람은 다음 발생 1건만 예약, 탭 시 재등록
-- **알림 탭 이동**: killed 상태 대응 — `setPendingNotifType` → auth 완료 후 `consumePendingNotifType`
+- **알림 탭 이동**: killed 상태 대응 — auth 완료 후 `consumePendingNotifType` 호출 (`navigationRef.ts`)
 
 ### 테스트
 - `npm test` — Jest 단위 테스트 (53개, `jest-expo` 프리셋)

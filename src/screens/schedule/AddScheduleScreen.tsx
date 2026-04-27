@@ -303,7 +303,7 @@ export default function AddScheduleScreen({
           {/* 제목 */}
           <TextInput
             label="제목 *"
-            value={labelsReady ? title : ''}
+            value={title}
             onChangeText={setTitle}
             mode="outlined"
             style={styles.input}
@@ -514,7 +514,7 @@ export default function AddScheduleScreen({
           <View style={styles.doubleRow}>
             <TextInput
               label="장소"
-              value={labelsReady ? location : ''}
+              value={location}
               onChangeText={(v) => setLocation(v.trimStart())}
               mode="outlined"
               style={styles.halfInput}
@@ -526,7 +526,7 @@ export default function AddScheduleScreen({
             />
             <TextInput
               label="작성자"
-              value={labelsReady ? nameTag : ''}
+              value={nameTag}
               onChangeText={setNameTag}
               mode="outlined"
               style={styles.halfInput}
@@ -551,7 +551,7 @@ export default function AddScheduleScreen({
           {/* 메모 — 내용이 길면 자동으로 높이 확장 (scrollEnabled=false) */}
           <TextInput
             label="메모 (선택)"
-            value={labelsReady ? memo : ''}
+            value={memo}
             onChangeText={(v) => setMemo(v.trimStart())}
             mode="outlined"
             style={[styles.input, styles.memoInput]}
