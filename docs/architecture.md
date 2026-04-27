@@ -138,6 +138,24 @@ toggleCompleted(id)            // 완료 토글 + 알람 처리 + fetchTodos
     await AsyncStorage.setItem('alarm_reset_v1', 'true');
   }
   ```
+- 알람 유틸: `src/utils/scheduleAlarms.ts`
+  - `scheduleAlarmNotifications(schedule)`: 비반복 일정 복수 알람 등록 (`{id}_{i}`)
+  - `scheduleNextRepeatAlarm(schedule)`: 반복 일정 다음 발생 1건만 등록 (`{id}_repeat_{i}`)
+  - `cancelRepeatAlarms(scheduleId, count)`: 반복 알람 일괄 취소
+  - `getNextRepeatOccurrence(schedule)`: 다음 반복 발생일 계산
+
+### 반복 일정 알람 재등록 전략
+- **1건만 등록**: 반복 알람은 다음 발생 1건만 예약 (OS 알람 슬롯 절약)
+- **알람 탭 시**: `App.tsx` — `_repeat_` 포함 identifier 감지 → `scheduleNextRepeatAlarm()` 즉시 재등록
+- **앱 시작 시**: `AppNavigator.tsx` — `reRegisterMissingRepeatAlarms()` — 예약 목록에 없는 반복 알람 보완 등록
+- **저장 순서 주의**: `onSave()` 완료 후 알람 등록 필수 (scheduleStore가 onSave 중 기존 알람 취소하므로 순서 역전 시 덮어쓰기 버그)
+- 반복 활성 시 기존 알람 UI 숨김, 독립 `repeatAlarmTime` + 반복 종료일 2열 레이아웃 (`repeatTimeRow`)
+
+### 알림 탭 → 화면 이동
+- `src/utils/navigationRef.ts`: `navigationRef`, `navigateToTab`, `setPendingNotifType`, `consumePendingNotifType`
+- **앱 실행 중/백그라운드**: `addNotificationResponseReceivedListener` → `navigateToTab()` 즉시 호출
+- **앱 완전 종료(killed)**: `getLastNotificationResponseAsync()` → `setPendingNotifType()` 저장 → AppNavigator auth 완료 후 `consumePendingNotifType()` 처리
+  - 이유: killed 상태에서는 `navigationRef.isReady()` false이고 탭 네비게이터도 미마운트
 
 ---
 
