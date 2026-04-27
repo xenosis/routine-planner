@@ -172,13 +172,6 @@ export async function toggleCompletion(
 }
 
 /**
- * 특정 날짜에 완료된 루틴의 id 배열을 반환한다. (getCompletedIds의 별칭)
- */
-export async function getCompletionsByDate(date: string): Promise<string[]> {
-  return getCompletedIds(date);
-}
-
-/**
  * 이번 주(월~일) 완료 기록 조회 (routineId → 완료된 날짜 배열)
  */
 export async function getWeekCompletions(

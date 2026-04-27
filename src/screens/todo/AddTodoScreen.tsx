@@ -23,6 +23,7 @@ import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Todo } from '../../db/todoDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
+import { toLocalDateStr } from '../../utils/date';
 
 // 카테고리별 대표 색상 (일정과 동일 팔레트)
 const CATEGORY_COLORS: Record<Todo['category'], string> = {
@@ -78,15 +79,6 @@ function formatAlarmTime(minutes: number): string {
   return `${w === Math.floor(w) ? Math.floor(w) : w.toFixed(1)}주 전`;
 }
 
-// 오늘 날짜를 YYYY-MM-DD 형식으로 반환
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 // 새 할일용 고유 ID 생성
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2);
@@ -113,7 +105,7 @@ export default function AddTodoScreen({
 
   // 폼 상태
   const [title, setTitle] = useState('');
-  const [deadlineDate, setDeadlineDate] = useState(getTodayString());
+  const [deadlineDate, setDeadlineDate] = useState(toLocalDateStr());
   const [deadlineTime, setDeadlineTime] = useState('09:00');
   const [category, setCategory] = useState<Todo['category']>('개인');
   const [memo, setMemo] = useState('');
@@ -142,7 +134,7 @@ export default function AddTodoScreen({
     } else {
       // 추가 모드 초기화
       setTitle('');
-      setDeadlineDate(getTodayString());
+      setDeadlineDate(toLocalDateStr());
       setDeadlineTime('09:00');
       setCategory('개인');
       setMemo('');

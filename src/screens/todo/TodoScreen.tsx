@@ -19,14 +19,6 @@ import { spacing, borderRadius } from '../../theme';
 // 헬퍼 함수
 // ─────────────────────────────────────────────
 
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 /**
  * 날짜 문자열(YYYY-MM-DD) 기준으로 진행중 탭의 날짜 구분 카테고리를 반환한다.
  * - '지남': 마감 초과

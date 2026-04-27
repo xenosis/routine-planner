@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { PanResponder, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { IconButton, Text, useTheme } from 'react-native-paper';
 import { borderRadius, spacing } from '../../theme';
+import { toLocalDateStr } from '../../utils/date';
 
 const WEEK_DAYS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 
@@ -26,11 +27,6 @@ function toDateString(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function getTodayString(): string {
-  const now = new Date();
-  return toDateString(now.getFullYear(), now.getMonth() + 1, now.getDate());
-}
-
 export default function MonthCalendar({
   selectedDate,
   markedDates,
@@ -39,9 +35,9 @@ export default function MonthCalendar({
   rangeEvents,
 }: MonthCalendarProps): React.JSX.Element {
   const theme = useTheme();
-  const today = getTodayString();
+  const today = toLocalDateStr();
 
-  const initial = selectedDate || getTodayString();
+  const initial = selectedDate || toLocalDateStr();
   const [viewYear, setViewYear] = useState(() => parseInt(initial.split('-')[0], 10));
   const [viewMonth, setViewMonth] = useState(() => parseInt(initial.split('-')[1], 10));
 

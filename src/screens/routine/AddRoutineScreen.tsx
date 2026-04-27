@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Routine } from '../../db/routineDb';
+import { toLocalDateStr } from '../../utils/date';
 
 // 카테고리별 대표 색상
 export const ROUTINE_CATEGORY_COLORS: Record<Routine['category'], string> = {
@@ -67,15 +68,6 @@ interface AddRoutineScreenProps {
 // 새 루틴용 고유 ID 생성
 function generateId(): string {
   return Date.now().toString() + Math.random().toString(36).slice(2);
-}
-
-// 오늘 날짜 문자열 반환 (YYYY-MM-DD)
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }
 
 /**
@@ -214,7 +206,7 @@ export default function AddRoutineScreen({
       alarm: alarmEnabled,
       alarmTime: alarmEnabled ? alarmTime : undefined,
       streak: routine?.streak ?? 0,
-      createdAt: routine?.createdAt ?? getTodayString(),
+      createdAt: routine?.createdAt ?? toLocalDateStr(),
     };
 
     // 알람 예약 처리

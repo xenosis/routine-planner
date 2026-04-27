@@ -12,6 +12,7 @@ import {
   deleteSchedule as dbDeleteSchedule,
 } from '../db/scheduleDb';
 import { cancelRepeatAlarms } from '../utils/scheduleAlarms';
+import { toLocalDateStr } from '../utils/date';
 
 export type { Schedule } from '../db/scheduleDb';
 import type { Schedule } from '../db/scheduleDb';
@@ -19,14 +20,6 @@ import type { Schedule } from '../db/scheduleDb';
 // ─────────────────────────────────────────────
 // 헬퍼
 // ─────────────────────────────────────────────
-
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 function parseYearMonth(date: string): { year: number; month: number } {
   const [yearStr, monthStr] = date.split('-');
@@ -91,7 +84,7 @@ interface ScheduleState {
 // Zustand 스토어
 // ─────────────────────────────────────────────
 
-const todayInit = getTodayString();
+const todayInit = toLocalDateStr();
 const { year: initYear, month: initMonth } = parseYearMonth(todayInit);
 
 export const useScheduleStore = create<ScheduleState>((set, get) => ({

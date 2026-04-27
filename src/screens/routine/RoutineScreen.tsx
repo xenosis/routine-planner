@@ -15,15 +15,7 @@ import { initDatabase } from '../../db/database';
 import { useRoutineStore } from '../../store/routineStore';
 import type { Routine } from '../../db/routineDb';
 import { borderRadius, spacing } from '../../theme';
-
-// 오늘 날짜 문자열 반환 (YYYY-MM-DD)
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+import { toLocalDateStr } from '../../utils/date';
 
 // "4월 9일" 형식으로 날짜 포맷
 function formatDateShort(dateStr: string): string {
@@ -50,7 +42,7 @@ export default function RoutineScreen(): React.JSX.Element {
   const [editingRoutine, setEditingRoutine] = useState<Routine | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'today' | 'all'>('today');
 
-  const today = getTodayString();
+  const today = toLocalDateStr();
 
   // 마운트 시 DB 초기화 및 데이터 로드
   useEffect(() => {

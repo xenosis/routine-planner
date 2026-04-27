@@ -16,18 +16,11 @@ import { initDatabase } from '../../db/database';
 import { useScheduleStore } from '../../store/scheduleStore';
 import type { Schedule } from '../../db/scheduleDb';
 import { spacing } from '../../theme';
+import { toLocalDateStr } from '../../utils/date';
 
 // ─────────────────────────────────────────────
 // 헬퍼 함수
 // ─────────────────────────────────────────────
-
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
 function formatDayLabel(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -45,7 +38,7 @@ function formatDateSeparator(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-  const today = getTodayString();
+  const today = toLocalDateStr();
   const prefix = dateStr === today ? '오늘 · ' : '';
   return `${prefix}${m}월 ${d}일 ${dayNames[date.getDay()]}`;
 }
@@ -100,7 +93,7 @@ export default function ScheduleScreen(): React.JSX.Element {
   useEffect(() => {
     async function init() {
       await initDatabase();
-      const today = getTodayString();
+      const today = toLocalDateStr();
       const [year, month] = today.split('-').map(Number);
       await fetchByDate(today);
       await fetchMarkedDates(year, month);
@@ -216,7 +209,7 @@ export default function ScheduleScreen(): React.JSX.Element {
   useEffect(() => {
     if (!isMonthView || listItems.length === 0) return;
 
-    const currentToday = getTodayString();
+    const currentToday = toLocalDateStr();
     let offset = 0;
     let foundFuture = false;
 
@@ -244,7 +237,7 @@ export default function ScheduleScreen(): React.JSX.Element {
     : formatDayLabel(selectedDate);
 
   // 초기 표시용 날짜 (AddScheduleScreen의 기본값)
-  const today = getTodayString();
+  const today = toLocalDateStr();
   const defaultDate = selectedDate ?? today;
 
   // ── 빈 화면 ─────────────────────────────

@@ -34,15 +34,7 @@ import {
   getThisWeekDays,
   getScheduledCountForDate,
 } from '../../utils/achievementCalc';
-
-/** 오늘 날짜 문자열 반환 (YYYY-MM-DD, 로컬 타임존 기준) */
-function getTodayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
+import { toLocalDateStr } from '../../utils/date';
 
 // ─────────────────────────────────────────────
 // 성과 데이터 타입
@@ -89,7 +81,7 @@ function useAchievementData() {
 
       await initDatabase();
 
-      const today = getTodayString();
+      const today = toLocalDateStr();
       const thisWeekDays = getThisWeekDays(today);
       const weekStart = thisWeekDays[0];
 
@@ -938,7 +930,7 @@ export default function AchievementScreen(): React.JSX.Element {
   const { data, loading, error } = useAchievementData();
   const [activeTab, setActiveTab] = useState<'weekly' | 'monthly' | 'routines'>('weekly');
 
-  const today = useMemo(() => getTodayString(), []);
+  const today = useMemo(() => toLocalDateStr(), []);
 
   // ── 로딩 상태 ─────────────────────────────────
   if (loading) {
