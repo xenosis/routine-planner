@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { getNameColor, NAME_TAG_DEFAULT_COLOR } from '../utils/nameTag';
+export { matchesRepeatDate } from '../utils/repeatDate';
 
 // ─────────────────────────────────────────────
 // 타입 정의
@@ -22,32 +23,6 @@ export interface Schedule {
   nameTagColor?: string;
   repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | string;  // 반복 유형 (테스트: 'minutes:N')
   repeatUntil?: string;  // YYYY-MM-DD (반복 종료일, 없으면 무한)
-}
-
-// ─────────────────────────────────────────────
-// 반복 패턴 매칭 헬퍼
-// ─────────────────────────────────────────────
-
-export function matchesRepeatDate(
-  repeat: string,
-  startDate: string,
-  targetDate: string,
-): boolean {
-  const start = new Date(startDate + 'T00:00:00');
-  const target = new Date(targetDate + 'T00:00:00');
-  if (target < start) return false;
-
-  // 분 단위 반복 (테스트용): 시작일 당일에만 표시
-  if (repeat.startsWith('minutes:')) return start.getTime() === target.getTime();
-
-  switch (repeat) {
-    case 'daily': return true;
-    case 'weekly': return start.getDay() === target.getDay();
-    case 'monthly': return start.getDate() === target.getDate();
-    case 'yearly':
-      return start.getMonth() === target.getMonth() && start.getDate() === target.getDate();
-    default: return false;
-  }
 }
 
 // ─────────────────────────────────────────────

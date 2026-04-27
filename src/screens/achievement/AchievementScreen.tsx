@@ -27,10 +27,13 @@ import {
   type RoutineScheduleInfo,
 } from '../../db/achievementDb';
 import { borderRadius, spacing } from '../../theme';
-
-// ─────────────────────────────────────────────
-// 날짜 유틸리티 함수
-// ─────────────────────────────────────────────
+import {
+  getDateBefore,
+  getDayLabel,
+  getWeekStart,
+  getThisWeekDays,
+  getScheduledCountForDate,
+} from '../../utils/achievementCalc';
 
 /** 오늘 날짜 문자열 반환 (YYYY-MM-DD, 로컬 타임존 기준) */
 function getTodayString(): string {
@@ -39,71 +42,6 @@ function getTodayString(): string {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-}
-
-/** YYYY-MM-DD 에서 N일 전 날짜 문자열 반환 */
-function getDateBefore(dateStr: string, days: number): string {
-  const date = new Date(dateStr);
-  date.setDate(date.getDate() - days);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-/** YYYY-MM-DD 에서 요일 두 글자 반환 (월, 화, 수, ...) */
-function getDayLabel(dateStr: string): string {
-  const [y, mo, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, mo - 1, d);
-  return ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
-}
-
-/** 날짜 문자열의 월요일(주 시작일) 반환 */
-function getWeekStart(dateStr: string): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const dow = date.getDay();
-  const daysFromMon = dow === 0 ? 6 : dow - 1;
-  const mon = new Date(y, m - 1, d - daysFromMon);
-  return `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
-}
-
-/** 이번 주 월요일 ~ 오늘까지의 날짜 문자열 배열 반환 (1~7일) */
-function getThisWeekDays(today: string): string[] {
-  const [y, m, d] = today.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const dow = date.getDay(); // 0=일, 1=월, ..., 6=토
-  const daysFromMon = dow === 0 ? 6 : dow - 1;
-  const dates: string[] = [];
-  for (let i = daysFromMon; i >= 0; i--) {
-    dates.push(getDateBefore(today, i));
-  }
-  return dates;
-}
-
-/**
- * 특정 날짜에 예정된 루틴 수를 계산한다.
- * - daily / weekly_count: 항상 예정 (단, quotaMetIds에 포함된 weekly_count는 제외)
- * - weekly_days: 해당 날짜의 요일이 weekdays 배열에 포함될 때만 예정
- * - 루틴 생성일(createdAt) 이후부터만 포함
- */
-function getScheduledCountForDate(
-  date: string,
-  routines: RoutineScheduleInfo[],
-  quotaMetIds?: Set<string>,
-): number {
-  const [y, m, d] = date.split('-').map(Number);
-  const weekday = new Date(y, m - 1, d).getDay();
-  return routines.filter((r) => {
-    if (r.createdAt > date) return false;
-    if (r.frequency === 'weekly_count') {
-      if (quotaMetIds?.has(r.id)) return false;
-      return true;
-    }
-    if (r.frequency === 'daily') return true;
-    if (r.frequency === 'weekly_days') return r.weekdays?.includes(weekday) ?? false;
-    return false;
-  }).length;
 }
 
 // ─────────────────────────────────────────────
@@ -232,27 +170,33 @@ function useAchievementData() {
       // 주간 달성률: 루틴별로 계산 후 평균
       // - daily / weekly_days: 이번 주 예정 일수 대비 완료 일수
       // - weekly_count: min(완료횟수, quota) / quota
+      // - weekly_days로 이번 주 아직 예정일 없는 루틴은 평균에서 제외 (기회 없음 → 0% 왜곡 방지)
       let weeklyRate = 0;
       const activeRoutines = routineSchedules.filter((r) => r.createdAt <= today);
       if (activeRoutines.length > 0) {
-        const rates = activeRoutines.map((routine) => {
-          const done = weeklyDoneMap.get(routine.id) ?? 0;
-          if (routine.frequency === 'weekly_count') {
-            const quota = routine.weeklyCount ?? 1;
-            return Math.min(done / quota, 1);
-          }
-          const scheduledDays = thisWeekDays.filter((d) => {
-            if (d < routine.createdAt) return false;
-            const [y, mo, day] = d.split('-').map(Number);
-            const weekday = new Date(y, mo - 1, day).getDay();
-            if (routine.frequency === 'daily') return true;
-            return routine.weekdays?.includes(weekday) ?? false;
-          }).length;
-          return scheduledDays > 0 ? Math.min(done / scheduledDays, 1) : 1;
-        });
-        weeklyRate = Math.round(
-          (rates.reduce((a, b) => a + b, 0) / rates.length) * 100,
-        );
+        const rates = activeRoutines
+          .map((routine) => {
+            const done = weeklyDoneMap.get(routine.id) ?? 0;
+            if (routine.frequency === 'weekly_count') {
+              const quota = routine.weeklyCount ?? 1;
+              return Math.min(done / quota, 1);
+            }
+            const scheduledDays = thisWeekDays.filter((d) => {
+              if (d < routine.createdAt) return false;
+              const [y, mo, day] = d.split('-').map(Number);
+              const weekday = new Date(y, mo - 1, day).getDay();
+              if (routine.frequency === 'daily') return true;
+              return routine.weekdays?.includes(weekday) ?? false;
+            }).length;
+            // 이번 주 아직 예정일 없는 weekly_days → 평균 계산에서 제외
+            return scheduledDays > 0 ? Math.min(done / scheduledDays, 1) : null;
+          })
+          .filter((r): r is number => r !== null);
+        if (rates.length > 0) {
+          weeklyRate = Math.round(
+            (rates.reduce((a, b) => a + b, 0) / rates.length) * 100,
+          );
+        }
       }
 
       setData({
@@ -535,12 +479,11 @@ const WeeklyChart = React.memo(function WeeklyChart({
             : item.value >= 50
             ? theme.colors.primary
             : theme.colors.outline,
-        topLabelComponent: () =>
-          item.value > 0 ? (
-            <Text style={{ fontSize: 9, color: theme.colors.onSurfaceVariant, marginBottom: 2 }}>
-              {item.value}
-            </Text>
-          ) : null,
+        topLabelComponent: () => (
+          <Text style={{ fontSize: 9, color: theme.colors.onSurfaceVariant, marginBottom: 2 }}>
+            {item.value > 0 ? item.value : '0%'}
+          </Text>
+        ),
       })),
     [chartData, theme],
   );
