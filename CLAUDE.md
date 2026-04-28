@@ -78,7 +78,8 @@ scripts/    - make-notification-icon.js
 - **성과탭 월간/루틴별**: `quotaMetBeforeThisDay` 집합으로 weekly_count quota 달성 루틴 분모 제외
 - **루틴 탭 오늘 목록**: `weekly_count` quota 달성 AND 오늘 미체크 시 목록·카운트에서 제외
 - **Android 알람**: 반복 알람은 다음 발생 1건만 예약, 탭 시 재등록
-- **알림 탭 이동**: killed 상태 대응 — auth 완료 후 `consumePendingNotifType` 호출 (`navigationRef.ts`)
+- **알림 탭 이동 (killed 상태)**: `App.tsx` `getLastNotificationResponseAsync` → `setPendingNotifType` 저장 → `AppNavigator` auth 완료 후 `consumePendingNotifType` 소비 + `requestAnimationFrame` 재귀로 `navigationRef.isReady()` true 될 때까지 대기 후 이동
+  - **주의**: `setPendingNotifType` 없으면 타입 저장 안 됨 / `isReady()` 직접 호출하면 Tab.Navigator mount 전이라 무시됨
 
 ### 테스트
 - `npm test` — Jest 단위 테스트 (53개, `jest-expo` 프리셋)
@@ -98,3 +99,4 @@ scripts/    - make-notification-icon.js
 - `docs/api-patterns.md` — Supabase 패턴, 카카오 장소 검색, 달성률 계산 세부 로직
 - `docs/data-models.md` — DB 스키마, 알람 ID 패턴, 스트릭/달성률 계산, 카테고리 색상
 - `docs/test-checklist.md` — 수동 회귀 테스트 시나리오 목록
+- `docs/build-commands.md` — 개발 서버, 로컬 APK 빌드, EAS 빌드 명령어 모음

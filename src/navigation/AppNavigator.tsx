@@ -13,7 +13,7 @@ import TodoScreen from '../screens/todo/TodoScreen';
 import AccountScreen from '../screens/account/AccountScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import { useAuthStore } from '../store/authStore';
-import { consumePendingNotifType, navigateToTab } from '../utils/navigationRef';
+import { navigationRef, consumePendingNotifType, navigateToTab } from '../utils/navigationRef';
 import { getRepeatSchedulesWithAlarm } from '../db/scheduleDb';
 import { scheduleNextRepeatAlarm } from '../utils/scheduleAlarms';
 
@@ -77,10 +77,21 @@ export default function AppNavigator(): React.JSX.Element {
   }, [initialize]);
 
   // 앱 killed 상태에서 알림으로 진입한 경우: auth 로딩 완료 후 탭 이동
+  // loading 완료 시점에 Tab.Navigator가 아직 mount 중일 수 있으므로
+  // navigationRef.isReady()가 true가 될 때까지 rAF로 대기
   useEffect(() => {
     if (!loading) {
       const type = consumePendingNotifType();
-      if (type) navigateToTab(type);
+      if (type) {
+        const tryNavigate = () => {
+          if (navigationRef.isReady()) {
+            navigateToTab(type);
+          } else {
+            requestAnimationFrame(tryNavigate);
+          }
+        };
+        requestAnimationFrame(tryNavigate);
+      }
     }
   }, [loading]);
 

@@ -6,6 +6,10 @@ export const navigationRef = createNavigationContainerRef<RootTabParamList>();
 // 앱이 killed 상태에서 알림으로 실행된 경우 pending 저장
 let pendingNotifType: string | undefined = undefined;
 
+export function setPendingNotifType(type: string | undefined): void {
+  pendingNotifType = type;
+}
+
 export function consumePendingNotifType(): string | undefined {
   const type = pendingNotifType;
   pendingNotifType = undefined;
