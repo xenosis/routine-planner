@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   BackHandler,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -13,7 +14,6 @@ import {
   Chip,
   Divider,
   IconButton,
-  Portal,
   Switch,
   Text,
   TextInput,
@@ -265,10 +265,14 @@ export default function AddScheduleScreen({
   const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid;
 
   return (
-    <Portal>
-      <View style={[styles.overlay, { backgroundColor: theme.colors.background }]}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
       <KeyboardAvoidingView
-        style={[styles.root, { paddingTop: insets.top }]}
+        style={[styles.root, { backgroundColor: theme.colors.background, paddingTop: insets.top }]}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         {/* 상단 헤더 */}
@@ -927,16 +931,11 @@ export default function AddScheduleScreen({
           </View>
         </View>
       </KeyboardAvoidingView>
-      </View>
-    </Portal>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 100,
-  },
   root: {
     flex: 1,
   },
