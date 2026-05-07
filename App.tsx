@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import AppNavigator from './src/navigation/AppNavigator';
 import { lightTheme, darkTheme } from './src/theme';
-import { navigationRef, navigateToTab, setPendingNotifType } from './src/utils/navigationRef';
+import { navigationRef, navigateToTab, setPendingNotifType, consumePendingNotifType } from './src/utils/navigationRef';
 import { getScheduleById } from './src/db/scheduleDb';
 import { scheduleNextRepeatAlarm } from './src/utils/scheduleAlarms';
 
@@ -94,12 +94,24 @@ export default function App(): React.JSX.Element {
     setupNotifications();
 
     // 앱이 종료된 상태에서 알림 탭으로 실행된 경우
-    // navigationRef와 탭이 아직 준비 안 됐을 수 있으므로 pending으로 저장 → AppNavigator에서 처리
+    // pending으로 저장하되, auth가 이미 완료된 경우(race condition)를 대비해
+    // navigationRef.isReady()가 true가 될 때까지 rAF로 대기 후 직접 이동도 시도
     Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) {
-        const type = response.notification.request.content.data?.type as string | undefined;
-        setPendingNotifType(type);
-      }
+      if (!response) return;
+      const type = response.notification.request.content.data?.type as string | undefined;
+      if (!type) return;
+      setPendingNotifType(type);
+      // AppNavigator가 먼저 consumePendingNotifType()을 소비했을 경우를 대비:
+      // nav가 준비되면 직접 이동 (consumePendingNotifType으로 중복 방지)
+      const tryNavigate = () => {
+        if (navigationRef.isReady()) {
+          const pending = consumePendingNotifType();
+          if (pending) navigateToTab(pending);
+        } else {
+          requestAnimationFrame(tryNavigate);
+        }
+      };
+      requestAnimationFrame(tryNavigate);
     });
 
     // 앱이 실행 중이거나 백그라운드일 때 알림 탭 (이미 준비됐으므로 바로 navigate)
