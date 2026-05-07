@@ -52,16 +52,34 @@ android {
 }
 ```
 
+**4. android/ 설정 복구** (prebuild --clean 후 항상 실행)
+```powershell
+powershell -File scripts/setup-android.ps1
+```
+> `local.properties` + `build.gradle` 서명 설정을 자동으로 복구.
+> `keystore.properties`(프로젝트 루트)에서 비밀번호/alias를 읽어 적용.
+
 ### APK 빌드 (매번)
 
+> JS/TS 소스코드만 변경했을 때는 prebuild 없이 바로 이 명령만 실행.
+
 ```powershell
-cd android
-.\gradlew assembleRelease
+npm run build:apk
 ```
 
-결과물: `android/app/build/outputs/apk/release/app-release.apk`
+결과물: 프로젝트 루트의 **`doro.apk`**
+
+> 내부적으로 `scripts/build-apk.ps1` 실행 → `android/gradlew assembleRelease` → 루트에 `doro.apk` 복사.
 
 ### 문제 해결
+
+**`prebuild --clean` 실행 중 파일 잠금 오류** (`EBUSY: resource busy or locked`)
+→ Gradle 데몬이 빌드 후에도 백그라운드에서 살아있어 파일을 점유. Java 프로세스 종료 후 재시도:
+```powershell
+Get-Process -Name "java" -ErrorAction SilentlyContinue | Stop-Process -Force
+npx expo prebuild --clean
+```
+> `prebuild --clean`은 네이티브 모듈 추가/변경 시에만 필요. 일반 빌드(`.\gradlew assembleRelease`)에서는 발생하지 않음.
 
 **SDK 경로 오류** (`SDK location not found`)
 → `android/local.properties` 파일 확인:

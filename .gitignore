@@ -33,12 +33,18 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Android signing (비밀번호 포함)
+keystore.properties
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# 로컬 빌드 산출물
+doro.apk
 
 # Claude Code
 .claude/
