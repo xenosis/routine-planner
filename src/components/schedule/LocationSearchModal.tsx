@@ -41,62 +41,97 @@ function buildKakaoMapHtml(jsKey: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <meta name="color-scheme" content="light">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body, #map { width: 100%; height: 100%; }
+    html, body { width: 100%; height: 100%; color-scheme: light; background: #fff; }
+    #map { width: 100%; height: 100%; }
+    #err { display: none; position: absolute; inset: 0; background: #f5f5f5;
+           flex-direction: column; align-items: center; justify-content: center;
+           padding: 24px; gap: 8px; }
+    #err.show { display: flex; }
+    #err p { color: #555; font-size: 13px; text-align: center; line-height: 1.5; word-break: break-all; }
   </style>
-  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${jsKey}&autoload=false"></script>
+  <script type="text/javascript"
+    src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${jsKey}&autoload=false"
+    onerror="showErr('SDK 로드 실패 (네트워크/키 오류)')"></script>
 </head>
 <body>
   <div id="map"></div>
+  <div id="err"><p id="errmsg">지도를 불러올 수 없습니다</p></div>
   <script>
-    window.onerror = function(msg, src, line, col, err) {
-      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'JS_ERROR', msg: msg, src: src }));
+    function notify(type, msg) {
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+        JSON.stringify({ type: type, msg: msg || '' })
+      );
+    }
+    function showErr(msg) {
+      var el = document.getElementById('err');
+      if (el) el.className = 'show';
+      var mel = document.getElementById('errmsg');
+      if (mel) mel.textContent = msg || '지도 오류';
+      notify('JS_ERROR', msg);
+    }
+    window.onerror = function(msg, src, line) {
+      showErr(msg + ' (' + (src || '') + ':' + (line || '') + ')');
+      return true;
     };
 
-    kakao.maps.load(function() {
-
-    var map = new kakao.maps.Map(document.getElementById('map'), {
-      center: new kakao.maps.LatLng(37.5665, 126.9780),
-      level: 6
-    });
-    var markers = [];
-
-    function clearMarkers() {
-      markers.forEach(function(m) { m.setMap(null); });
-      markers = [];
-    }
-
-    function addMarkers(places) {
-      clearMarkers();
-      if (!places || !places.length) return;
-      var bounds = new kakao.maps.LatLngBounds();
-      places.forEach(function(place) {
-        var pos = new kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x));
-        new kakao.maps.Marker({ position: pos, map: map });
-        bounds.extend(pos);
-      });
-      map.setBounds(bounds);
-    }
-
-    window.addEventListener('message', function(e) {
+    if (typeof kakao === 'undefined') {
+      showErr('kakao 객체 없음 — SDK 로드 실패');
+    } else {
       try {
-        var data = JSON.parse(e.data);
-        if (data.type === 'PLACES') {
-          addMarkers(data.places);
-        } else if (data.type === 'FOCUS') {
-          var pos = new kakao.maps.LatLng(parseFloat(data.y), parseFloat(data.x));
-          map.setCenter(pos);
-          map.setLevel(3);
-        } else if (data.type === 'RESET') {
-          clearMarkers();
-          map.setCenter(new kakao.maps.LatLng(37.5665, 126.9780));
-          map.setLevel(6);
-        }
-      } catch(err) {}
-    });
+        kakao.maps.load(function() {
+          try {
+            var map = new kakao.maps.Map(document.getElementById('map'), {
+              center: new kakao.maps.LatLng(37.5665, 126.9780),
+              level: 6
+            });
+            var markers = [];
 
-    }); // kakao.maps.load
+            function clearMarkers() {
+              markers.forEach(function(m) { m.setMap(null); });
+              markers = [];
+            }
+
+            function addMarkers(places) {
+              clearMarkers();
+              if (!places || !places.length) return;
+              var bounds = new kakao.maps.LatLngBounds();
+              places.forEach(function(place) {
+                var pos = new kakao.maps.LatLng(parseFloat(place.y), parseFloat(place.x));
+                new kakao.maps.Marker({ position: pos, map: map });
+                bounds.extend(pos);
+              });
+              map.setBounds(bounds);
+            }
+
+            window.addEventListener('message', function(e) {
+              try {
+                var data = JSON.parse(e.data);
+                if (data.type === 'PLACES') {
+                  addMarkers(data.places);
+                } else if (data.type === 'FOCUS') {
+                  var pos = new kakao.maps.LatLng(parseFloat(data.y), parseFloat(data.x));
+                  map.setCenter(pos);
+                  map.setLevel(3);
+                } else if (data.type === 'RESET') {
+                  clearMarkers();
+                  map.setCenter(new kakao.maps.LatLng(37.5665, 126.9780));
+                  map.setLevel(6);
+                }
+              } catch(err) {}
+            });
+
+            notify('MAP_READY', 'ok');
+          } catch(e) {
+            showErr('지도 초기화 오류: ' + e.message);
+          }
+        });
+      } catch(e) {
+        showErr('kakao.maps.load 오류: ' + e.message);
+      }
+    }
   </script>
 </body>
 </html>`;
@@ -133,6 +168,7 @@ export default function LocationSearchModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<KakaoPlace | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // WebView로 메시지 전송
@@ -151,12 +187,14 @@ export default function LocationSearchModal({
       setError(null);
       setLoading(false);
       setSelectedPlace(null);
+      setMapError(null);
     } else {
       setQuery('');
       setResults([]);
       setError(null);
       setLoading(false);
       setSelectedPlace(null);
+      setMapError(null);
     }
   }, [visible]);
 
@@ -245,6 +283,7 @@ export default function LocationSearchModal({
       visible={visible}
       animationType="slide"
       onRequestClose={onClose}
+      statusBarTranslucent
     >
       <View
         style={[
@@ -288,23 +327,44 @@ export default function LocationSearchModal({
             ref={webViewRef}
             source={{ html: MAP_HTML, baseUrl: 'http://localhost' }}
             javaScriptEnabled
+            domStorageEnabled
             mixedContentMode="always"
             originWhitelist={['*']}
             scrollEnabled={false}
             style={styles.map}
-            onError={(e) => console.warn('WebView 에러:', e.nativeEvent)}
+            onError={(e) => {
+              const desc = e.nativeEvent.description ?? '알 수 없는 오류';
+              console.warn('WebView 에러:', desc);
+              setMapError(`WebView 오류: ${desc}`);
+            }}
             onHttpError={(e) => console.warn('WebView HTTP 에러:', e.nativeEvent.statusCode)}
             onMessage={(e) => {
               try {
                 const msg = JSON.parse(e.nativeEvent.data);
-                if (msg.type === 'JS_ERROR') console.warn('지도 JS 에러:', msg.msg, msg.src);
+                if (msg.type === 'JS_ERROR') {
+                  console.warn('지도 JS 에러:', msg.msg);
+                  setMapError(msg.msg);
+                } else if (msg.type === 'MAP_READY') {
+                  setMapError(null);
+                }
               } catch {}
             }}
           />
+          {mapError !== null && (
+            <View style={[styles.mapErrorOverlay, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <MaterialCommunityIcons name="alert-circle-outline" size={28} color={theme.colors.error} />
+              <Text style={[styles.mapErrorTitle, { color: theme.colors.onSurface }]}>
+                지도를 불러올 수 없습니다
+              </Text>
+              <Text style={[styles.mapErrorDetail, { color: theme.colors.onSurfaceVariant }]} numberOfLines={3}>
+                {mapError}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* 검색 결과 리스트 */}
-        <View style={styles.listContainer}>
+        <View style={[styles.listContainer, { paddingBottom: insets.bottom }]}>
           {loading && (
             <View style={styles.centerBox}>
               <ActivityIndicator color={theme.colors.primary} />
@@ -355,7 +415,10 @@ export default function LocationSearchModal({
           <TouchableOpacity
             style={[
               styles.confirmBar,
-              { backgroundColor: theme.colors.primaryContainer },
+              {
+                backgroundColor: theme.colors.primaryContainer,
+                paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm,
+              },
             ]}
             onPress={handleConfirm}
             activeOpacity={0.85}
@@ -402,6 +465,23 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  mapErrorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  mapErrorTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  mapErrorDetail: {
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   listContainer: {
     maxHeight: 260,
