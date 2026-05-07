@@ -27,6 +27,9 @@ borderRadius: sm=8, md=12, lg=16, xl=24, full=9999
   ```
   → `insets.bottom > 0` 조건 필수 (Expo Go에서는 0이라 `spacing.sm` fallback 필요)
   → 기기 시스템 내비게이션 바 바로 위에 버튼이 위치하도록 insets만 사용 (추가 여백 없음)
+- **모든 `<Modal>`에 반드시 `statusBarTranslucent` 추가**
+  → `edgeToEdgeEnabled: true` 환경에서 누락 시 중첩 Modal 내부 WebView 레이아웃이 깨져 높이 0이 됨
+  → Expo 디버그 빌드에서는 정상 동작하지만 설치된 APK(프로덕션)에서만 재현되므로 주의
 
 ---
 

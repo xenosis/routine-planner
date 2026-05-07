@@ -24,6 +24,7 @@
 - 모던하고 세련된 UI, 다크모드 지원, 미니멀
 - SafeArea: `edges={['top', 'left', 'right']}` (하단은 탭 바가 처리)
 - 모달 footer: `paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm`
+- Modal: 반드시 `statusBarTranslucent` 설정 — `edgeToEdgeEnabled: true` 환경에서 누락 시 중첩 Modal 내부 WebView 높이 0 (프로덕션에서만 재현)
 - Paper TextInput 한글 입력 규칙
   - **절대 금지**: `value={field || ' '}` — 한글 자모 분리 버그
   - **절대 금지**: `value={labelsReady ? field : ''}` (한글 입력 필드에) — `''` 폴백이 IME composition 파괴
@@ -40,11 +41,11 @@
   // 한글 TextInput에는 절대 사용 금지 — value={field} 직접 사용
   ```
   - 전제: 부모 **조건부 렌더링** (`{visible && <Screen />}`) + 자식 **`useState(() => prop?.value ?? '')`**
-  - `AddScheduleScreen`은 `Portal` 기반 전체화면 (ScheduleScreen에서 `{modalVisible && <AddScheduleScreen />}`)
+  - `AddScheduleScreen`은 RN `Modal` 기반 전체화면 (`statusBarTranslucent` 필수) — ScheduleScreen에서 `{modalVisible && <AddScheduleScreen visible={modalVisible} />}`
 
 ---
 
-## 현재 구현 상태 (2026-04-28 기준)
+## 현재 구현 상태 (2026-05-03 기준)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -76,9 +77,12 @@ scripts/    - make-notification-icon.js
   - `weekly_days` 이번 주 예정일 없는 루틴은 `null` 반환 → 평균 제외 (분모 왜곡 방지)
   - 주간 차트 0%인 날은 "0%" 레이블 표시
 - **성과탭 월간/루틴별**: `quotaMetBeforeThisDay` 집합으로 weekly_count quota 달성 루틴 분모 제외
-- **루틴 탭 오늘 목록**: `weekly_count` quota 달성 AND 오늘 미체크 시 목록·카운트에서 제외
+- **루틴 탭 오늘 목록**: `weekly_count` quota 달성 AND 오늘 미체크 시 목록에서 제외 (목록 표시·체크는 가능, 헤더 카운트·진행률 바에서 항상 제외)
+- **루틴 탭 헤더 카운트/진행률**: `weekly_count` 루틴 전체 제외 (`countableRoutines`) — 주간 달성률에만 포함
+- **성과탭 오늘 완료**: `weekly_count` 루틴 제외 (`weeklyCountIds` Set 사용) — 주간 달성률에만 포함
 - **Android 알람**: 반복 알람은 다음 발생 1건만 예약, 탭 시 재등록
-- **알림 탭 이동 (killed 상태)**: `App.tsx` `getLastNotificationResponseAsync` → `setPendingNotifType` 저장 → `AppNavigator` auth 완료 후 `consumePendingNotifType` 소비 + `requestAnimationFrame` 재귀로 `navigationRef.isReady()` true 될 때까지 대기 후 이동
+- **알림 탭 이동 (killed 상태)**: `App.tsx` `getLastNotificationResponseAsync` → `setPendingNotifType` 저장 + rAF 재귀로 nav 준비 시 `consumePendingNotifType` 직접 이동 (race condition 방어)
+  - `AppNavigator`도 auth 완료 후 `consumePendingNotifType`을 시도 — 먼저 소비하는 쪽이 이동, 나머지는 `undefined`라 무시
   - **주의**: `setPendingNotifType` 없으면 타입 저장 안 됨 / `isReady()` 직접 호출하면 Tab.Navigator mount 전이라 무시됨
 
 ### 테스트
