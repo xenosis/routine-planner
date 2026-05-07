@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { getNameColor, NAME_TAG_DEFAULT_COLOR } from '../utils/nameTag';
+import { matchesRepeatDate } from '../utils/repeatDate';
 export { matchesRepeatDate } from '../utils/repeatDate';
 
 // ─────────────────────────────────────────────
