@@ -91,14 +91,17 @@ export default function RoutineScreen(): React.JSX.Element {
     return [...routines].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [routines]);
 
-  // 진행률 계산 (0 ~ 1)
-  // todayRoutines에서 quota 달성+오늘 미체크 weekly_count는 이미 제외되어 있으므로
-  // 단순히 completedIds 기준으로 계산
+  // 헤더 카운트·진행률 모수: weekly_count 제외 (주간 달성률에만 포함)
+  const countableRoutines = useMemo(
+    () => todayRoutines.filter((r) => r.frequency !== 'weekly_count'),
+    [todayRoutines],
+  );
+
+  // 진행률 계산 (0 ~ 1) — weekly_count 제외
   const progress = useMemo(() => {
-    if (todayRoutines.length === 0) return 0;
-    const doneCount = todayRoutines.filter((r) => completedIds.includes(r.id)).length;
-    return doneCount / todayRoutines.length;
-  }, [todayRoutines, completedIds]);
+    if (countableRoutines.length === 0) return 0;
+    return countableRoutines.filter((r) => completedIds.includes(r.id)).length / countableRoutines.length;
+  }, [countableRoutines, completedIds]);
 
   // FAB — 루틴 추가 모달 열기
   const handleFABPress = useCallback(() => {
@@ -258,9 +261,9 @@ export default function RoutineScreen(): React.JSX.Element {
           </Text>
         </View>
 
-        {/* 완료 카운트 (quota 달성+오늘 미체크 weekly_count는 todayRoutines에서 이미 제외) */}
+        {/* 완료 카운트 — weekly_count 제외 (주간 달성률에만 포함) */}
         <Text style={[styles.completionCount, { color: theme.colors.onSurfaceVariant }]}>
-          {todayRoutines.filter((r) => completedIds.includes(r.id)).length} / {todayRoutines.length} 완료
+          {countableRoutines.filter((r) => completedIds.includes(r.id)).length} / {countableRoutines.length} 완료
         </Text>
 
         {/* 진행률 바 */}

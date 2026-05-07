@@ -108,25 +108,16 @@ function useAchievementData() {
 
       const weeklyDoneMap = new Map(weeklyRoutineCompletions.map((r) => [r.routineId, r.count]));
 
-      // "오늘 이전에 이미 quota를 달성한" 루틴 ID 집합
-      // 오늘 체크분(todayCompletedIds)을 제외한 횟수로 판단해야
-      // 오늘 체크로 quota를 채운 경우는 "오늘 완료"로 정상 집계된다
-      const quotaMetBeforeToday = new Set(
-        routineSchedules
-          .filter((r) => {
-            if (r.frequency !== 'weekly_count') return false;
-            const total = weeklyDoneMap.get(r.id) ?? 0;
-            const todayCount = todayCompletedIds.includes(r.id) ? 1 : 0;
-            return (total - todayCount) >= (r.weeklyCount ?? 1);
-          })
-          .map((r) => r.id),
+      // weekly_count는 오늘 달성률 제외, 주간달성률에만 포함
+      const weeklyCountIds = new Set(
+        routineSchedules.filter((r) => r.frequency === 'weekly_count').map((r) => r.id),
       );
 
-      // 오늘 예정된 루틴 수 (오늘 이전에 이미 quota 달성한 weekly_count 제외)
-      const todayScheduled = getScheduledCountForDate(today, routineSchedules, quotaMetBeforeToday);
+      // 오늘 예정된 루틴 수 (weekly_count 제외)
+      const todayScheduled = getScheduledCountForDate(today, routineSchedules, weeklyCountIds);
 
-      // 오늘 완료 루틴 수 (오늘 이전 quota 달성 루틴 제외 → 분모와 일관성 유지)
-      const todayCompleted = todayCompletedIds.filter((id) => !quotaMetBeforeToday.has(id)).length;
+      // 오늘 완료 루틴 수 (weekly_count 제외)
+      const todayCompleted = todayCompletedIds.filter((id) => !weeklyCountIds.has(id)).length;
 
       // routineAchievements에서 최고 스트릭 루틴 도출 (단위 포함)
       const maxStreakRoutine = routineAchievements.reduce<typeof routineAchievements[number] | null>(
