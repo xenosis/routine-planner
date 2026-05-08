@@ -12,7 +12,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
 import ScheduleItem from '../../components/schedule/ScheduleItem';
 import AddScheduleScreen from './AddScheduleScreen';
-import { initDatabase } from '../../db/database';
 import { useScheduleStore } from '../../store/scheduleStore';
 import type { Schedule } from '../../db/scheduleDb';
 import { spacing } from '../../theme';
@@ -89,10 +88,9 @@ export default function ScheduleScreen(): React.JSX.Element {
   /** 월 전체 보기용 FlatList ref (자동 스크롤에 사용) */
   const monthListRef = useRef<FlatList<ListItem>>(null);
 
-  // 초기 데이터 로드
+  // 초기 데이터 로드 (DB 초기화는 AppNavigator에서 처리)
   useEffect(() => {
     async function init() {
-      await initDatabase();
       const today = toLocalDateStr();
       const [year, month] = today.split('-').map(Number);
       await fetchByDate(today);

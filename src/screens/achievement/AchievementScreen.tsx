@@ -12,7 +12,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import { Calendar } from 'react-native-calendars';
 
-import { initDatabase } from '../../db/database';
 import {
   getDailyCompletions,
   getRoutineAchievements,
@@ -78,8 +77,6 @@ function useAchievementData() {
     try {
       setLoading(true);
       setError(null);
-
-      await initDatabase();
 
       const today = toLocalDateStr();
       const thisWeekDays = getThisWeekDays(today);

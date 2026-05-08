@@ -45,7 +45,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-03 기준)
+## 현재 구현 상태 (2026-05-09 기준)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -54,8 +54,10 @@
 ```
 src/
   db/       - database.ts, scheduleDb.ts, routineDb.ts, achievementDb.ts, todoDb.ts
+              categoryDb.ts  ← 카테고리 CRUD (탭별 독립, 삭제/수정 시 기존 항목 '기타'로 마이그레이션)
   lib/      - supabase.ts
   store/    - authStore.ts, scheduleStore.ts, routineStore.ts, todoStore.ts
+              categoryStore.ts  ← 카테고리 Zustand 스토어
   utils/    - date.ts, nameTag.ts, navigationRef.ts, scheduleAlarms.ts
               achievementCalc.ts, streakCalc.ts, repeatDate.ts  ← 순수 계산 함수 (테스트 대상)
   screens/  - auth/, account/, schedule/, routine/, todo/, achievement/
@@ -63,6 +65,7 @@ src/
   navigation/ - AppNavigator.tsx
   theme/    - index.ts
 __tests__/  - achievementCalc.test.ts, streakCalc.test.ts, repeatDate.test.ts
+              database.test.ts  ← initDatabase race condition 방지 테스트
 scripts/    - make-notification-icon.js
 ```
 → 상세: `docs/architecture.md`
@@ -73,6 +76,13 @@ scripts/    - make-notification-icon.js
 - **일정**: Supabase 연동, 반복 일정 (`matchesRepeatDate` → `src/utils/repeatDate.ts`), 여러날/이름표/장소
 - **루틴**: daily / weekly_days / weekly_count, 스트릭 계산 (`src/utils/streakCalc.ts`)
 - **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`)
+- **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 일정/루틴/할일 탭별 독립 커스터마이징
+  - 계정 탭에서 추가/수정/삭제; 삭제·이름 변경 시 기존 항목 '기타'로 자동 마이그레이션
+  - `database.ts` 시드: 일정 4 + 루틴 5 + 할일 4 = 13개 기본 카테고리
+  - DB 초기화 race condition 방지: `initPromise` 캐시로 시드 중복 삽입 방지
+- **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 실행 (`dbReady` 게이트)
+  - killed 상태 푸시 알림 진입 시 데이터 미로드 버그 수정
+  - DB 초기화 완료 후 카테고리 전체 로드 (`fetchAllCategories`)
 - **성과탭 주간 달성률**: `getThisWeekDays(today)` 기준 (최근 7일 X), 루틴별 계산 후 평균
   - `weekly_days` 이번 주 예정일 없는 루틴은 `null` 반환 → 평균 제외 (분모 왜곡 방지)
   - 주간 차트 0%인 날은 "0%" 레이블 표시
@@ -86,8 +96,8 @@ scripts/    - make-notification-icon.js
   - **주의**: `setPendingNotifType` 없으면 타입 저장 안 됨 / `isReady()` 직접 호출하면 Tab.Navigator mount 전이라 무시됨
 
 ### 테스트
-- `npm test` — Jest 단위 테스트 (53개, `jest-expo` 프리셋)
-- 테스트 파일: `__tests__/achievementCalc.test.ts`, `streakCalc.test.ts`, `repeatDate.test.ts`
+- `npm test` — Jest 단위 테스트 (59개, `jest-expo` 프리셋)
+- 테스트 파일: `__tests__/achievementCalc.test.ts`, `streakCalc.test.ts`, `repeatDate.test.ts`, `database.test.ts`
 - 수동 회귀 체크리스트: `docs/test-checklist.md`
 - 계산 로직 변경 시 → `npm test` 먼저 실행 후 체크리스트 관련 항목 수동 확인
 

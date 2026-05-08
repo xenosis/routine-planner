@@ -4,11 +4,13 @@
 ```
 src/
   db/
-    database.ts        - DB 초기화 (SQLite 싱글톤, 루틴/할일 테이블 생성 및 마이그레이션)
+    database.ts        - DB 초기화 (SQLite 싱글톤, 루틴/할일/카테고리 테이블 생성 및 마이그레이션)
+                         Promise 캐시(dbOpenPromise, initPromise)로 동시 호출 race condition 방지
     scheduleDb.ts      - 일정 CRUD — Supabase 연동 (Schedule 타입 포함)
     routineDb.ts       - 루틴 CRUD (Routine 타입, 스트릭, 주간 완료 조회)
     achievementDb.ts   - 달성률 조회 (frequency/weekdays 반영, getEarliestRoutineCreatedAt 포함)
     todoDb.ts          - 할일 CRUD (Todo 타입 포함)
+    categoryDb.ts      - 카테고리 CRUD (schedule/routine/todo 탭별 독립, 삭제/수정 시 기존 항목 '기타'로 마이그레이션)
   lib/
     supabase.ts        - Supabase 클라이언트 싱글톤
   store/
@@ -16,6 +18,7 @@ src/
     scheduleStore.ts   - 일정 Zustand 스토어 (실시간 구독 포함)
     routineStore.ts    - 루틴 Zustand 스토어 (weekCompletions 포함)
     todoStore.ts       - 할일 Zustand 스토어 (알람 등록/취소 포함)
+    categoryStore.ts   - 카테고리 Zustand 스토어 (탭별 scheduleCategories/routineCategories/todoCategories)
   utils/
     date.ts            - 로컬 타임존 날짜 유틸 (toLocalDateStr)
     nameTag.ts         - 이름표 색상 팔레트 + getNameColor (해시 fallback용)
@@ -23,7 +26,7 @@ src/
     auth/
       LoginScreen.tsx        - 이메일/비밀번호 로그인 화면
     account/
-      AccountScreen.tsx      - 계정 탭 (이메일 표시, 작성자 이름+색상 설정, 로그아웃)
+      AccountScreen.tsx      - 계정 탭 (이메일 표시, 작성자 이름+색상 설정, 카테고리 관리, 로그아웃)
     schedule/
       ScheduleScreen.tsx     - 일정 메인 화면 (달력 + 목록, 실시간 구독, 월 전체 보기 버튼)
       AddScheduleScreen.tsx  - 일정 추가/수정 모달 (하단 삭제/저장 분리 버튼)
@@ -49,7 +52,8 @@ src/
       TodoItem.tsx           - 할일 카드 (D-day 뱃지, 체크박스, 삭제 버튼)
   navigation/
     AppNavigator.tsx         - 탭 순서: 일정 / 할일 / 루틴 / 성과 / 계정
-                               인증 게이트 포함 (미로그인 시 LoginScreen 표시)
+                               인증 게이트 + DB 초기화 게이트 (dbReady) 포함
+                               DB 초기화 완료 후 카테고리 전체 로드 (fetchAllCategories)
   theme/
     index.ts           - 라이트/다크 테마, spacing, borderRadius 토큰
 ```
@@ -59,6 +63,9 @@ src/
 ## 네비게이션 (AppNavigator)
 - 탭 순서: **일정 / 할일 / 루틴 / 성과 / 계정**
 - 인증 게이트: `authStore.session` 없으면 → `LoginScreen` 표시, 있으면 → 탭 네비게이터
+- **DB 초기화 게이트**: `initDatabase()` 완료 전(`dbReady: false`)까지 스피너 표시, 완료 후 카테고리 전체 로드
+  - 이전에 각 Screen에서 개별 호출하던 방식 → AppNavigator 중앙화로 통합
+  - killed 상태 푸시 알림 진입 시 데이터 미로드 버그 수정
 
 ---
 
@@ -71,6 +78,11 @@ src/
 - 로그인 이메일 표시
 - **작성자** 이름 입력 + 8가지 색상 팔레트 선택 → Supabase user_metadata에 저장
 - 실시간 뱃지 미리보기 (선택 색상 반영)
+- **카테고리 관리**: 일정 / 루틴 / 할일 탭별 독립 카테고리 목록
+  - 추가: 이름 + 색상 선택 (사용 중 색상 흰 점 표시, 미사용 색상 자동 선택)
+  - 수정: 이름 또는 색상 변경 → 기존 항목도 자동 반영
+  - 삭제: 해당 카테고리 항목을 '기타'로 마이그레이션 후 삭제 ('기타' 자체는 삭제 불가)
+  - `CategoryModal`: 선택된 색상 흰 테두리 강조 + 클릭 시 deselect 방지
 - 로그아웃 버튼
 
 ---

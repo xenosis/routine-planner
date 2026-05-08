@@ -9,7 +9,7 @@ import { calculateStreakFromDates } from '../utils/streakCalc';
 export interface Routine {
   id: string;
   title: string;
-  category: '운동' | '공부' | '청소' | '관리' | '기타';
+  category: string;
   color: string;
   frequency: 'daily' | 'weekly_days' | 'weekly_count';
   /** weekly_days: 루틴 예정 요일 / weekly_count: 알람 요일 (JS getDay() 기준: 0=일,...,6=토) */
@@ -48,7 +48,7 @@ function rowToRoutine(row: RoutineRow): Routine {
   return {
     id: row.id,
     title: row.title,
-    category: row.category as Routine['category'],
+    category: row.category,
     color: row.color,
     frequency: (row.frequency ?? 'daily') as Routine['frequency'],
     weekdays,

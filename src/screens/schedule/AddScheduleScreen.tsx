@@ -31,14 +31,13 @@ import {
   scheduleNextRepeatAlarm,
   formatAlarmTime,
 } from '../../utils/scheduleAlarms';
+import { useCategoryStore } from '../../store/categoryStore';
+import type { Category } from '../../db/categoryDb';
 
-// 카테고리별 대표 색상
-export const CATEGORY_COLORS: Record<Schedule['category'], string> = {
-  '업무': '#6366F1',
-  '개인': '#10B981',
-  '건강': '#F59E0B',
-  '기타': '#94A3B8',
-};
+// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
+function getCategoryColor(name: string, categories: Category[]): string {
+  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
+}
 
 // 알람 프리셋 (분 단위)
 const ALARM_PRESETS = [
@@ -58,14 +57,6 @@ const TIME_UNITS = [
 ] as const;
 
 type TimeUnit = 'min' | 'hour' | 'day' | 'week';
-
-// 카테고리 선택 옵션
-const CATEGORY_OPTIONS: Array<{ value: Schedule['category']; label: string }> = [
-  { value: '업무', label: '업무' },
-  { value: '개인', label: '개인' },
-  { value: '건강', label: '건강' },
-  { value: '기타', label: '기타' },
-];
 
 // 반복 옵션 목록
 const REPEAT_OPTIONS: Array<{ value: NonNullable<Schedule['repeat']>; label: string }> = [
@@ -103,13 +94,25 @@ export default function AddScheduleScreen({
   const displayName = useAuthStore((s) => s.session?.user.user_metadata?.display_name ?? '');
   const nameColor = useAuthStore((s) => s.session?.user.user_metadata?.name_color ?? '');
 
+  const scheduleCategories = useCategoryStore((s) => s.scheduleCategories);
+  const fetchCategories = useCategoryStore((s) => s.fetchCategories);
+
+  // 카테고리 목록 로드 (스토어가 비어 있을 때만)
+  useEffect(() => {
+    if (scheduleCategories.length === 0) {
+      fetchCategories('schedule');
+    }
+  }, [scheduleCategories.length, fetchCategories]);
+
+  const defaultCategory = scheduleCategories[0]?.name ?? '개인';
+
   // 폼 상태 — 조건부 렌더링으로 마운트마다 올바른 초기값으로 시작
   const [title, setTitle] = useState(() => schedule?.title ?? '');
   const [date, setDate] = useState(() => schedule?.date ?? initialDate);
   const [endDate, setEndDate] = useState(() => schedule?.endDate ?? schedule?.date ?? initialDate);
   const [startTime, setStartTime] = useState(() => schedule?.startTime ?? '09:00');
   const [endTime, setEndTime] = useState(() => schedule?.endTime ?? '10:00');
-  const [category, setCategory] = useState<Schedule['category']>(() => schedule?.category ?? '개인');
+  const [category, setCategory] = useState<string>(() => schedule?.category ?? defaultCategory);
   const [location, setLocation] = useState(() => schedule?.location ?? '');
   const [nameTag, setNameTag] = useState(() => schedule ? (schedule.nameTag ?? '') : displayName);
   const [nameTagColor, setNameTagColor] = useState(() => schedule ? (schedule.nameTagColor ?? '') : nameColor);
@@ -234,7 +237,7 @@ export default function AddScheduleScreen({
       startTime: effectiveStartTime,
       endTime: effectiveEndTime,
       category,
-      color: nameTagColor || CATEGORY_COLORS[category],
+      color: nameTagColor || getCategoryColor(category, scheduleCategories),
       memo: memo.trim() || undefined,
       alarm: hasAlarm,
       alarmTimes: hasRepeatAlarm ? [0] : (hasAlarm ? alarmTimes : undefined),
@@ -416,7 +419,7 @@ export default function AddScheduleScreen({
                   left={
                     <TextInput.Icon
                       icon={() => (
-                        <View style={[styles.categoryDot, { backgroundColor: CATEGORY_COLORS[category] }]} />
+                        <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(category, scheduleCategories) }]} />
                       )}
                     />
                   }
@@ -439,19 +442,19 @@ export default function AddScheduleScreen({
                     { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline },
                   ]}
                 >
-                  {CATEGORY_OPTIONS.map((opt) => (
+                  {scheduleCategories.map((opt) => (
                     <TouchableOpacity
-                      key={opt.value}
+                      key={opt.id}
                       style={[
                         styles.categoryOption,
-                        opt.value === category && { backgroundColor: theme.colors.primaryContainer },
+                        opt.name === category && { backgroundColor: theme.colors.primaryContainer },
                       ]}
-                      onPress={() => { setCategory(opt.value); setShowCategoryMenu(false); }}
+                      onPress={() => { setCategory(opt.name); setShowCategoryMenu(false); }}
                       activeOpacity={0.7}
                     >
-                      <View style={[styles.menuDot, { backgroundColor: CATEGORY_COLORS[opt.value] }]} />
+                      <View style={[styles.menuDot, { backgroundColor: opt.color }]} />
                       <Text style={[styles.categoryOptionText, { color: theme.colors.onSurface }]}>
-                        {opt.value}
+                        {opt.name}
                       </Text>
                     </TouchableOpacity>
                   ))}

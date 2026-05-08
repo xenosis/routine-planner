@@ -11,7 +11,6 @@ import { FAB, ProgressBar, SegmentedButtons, Surface, Text, useTheme } from 'rea
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import RoutineItem from '../../components/routine/RoutineItem';
 import AddRoutineScreen from './AddRoutineScreen';
-import { initDatabase } from '../../db/database';
 import { useRoutineStore } from '../../store/routineStore';
 import type { Routine } from '../../db/routineDb';
 import { borderRadius, spacing } from '../../theme';
@@ -44,10 +43,9 @@ export default function RoutineScreen(): React.JSX.Element {
 
   const today = toLocalDateStr();
 
-  // 마운트 시 DB 초기화 및 데이터 로드
+  // 마운트 시 데이터 로드 (DB 초기화는 AppNavigator에서 처리)
   useEffect(() => {
     async function init() {
-      await initDatabase();
       await fetchRoutines();
       await fetchCompletions(today);
       await fetchWeekCompletions();

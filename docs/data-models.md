@@ -68,6 +68,23 @@ createdAt TEXT NOT NULL
 - 신규 테이블 (마이그레이션 불필요, CREATE IF NOT EXISTS)
 - 인덱스: `idx_todos_deadline(deadlineDate, deadlineTime)`, `idx_todos_completed(completed)`
 
+### categories 테이블 — SQLite
+```sql
+id TEXT PRIMARY KEY
+type TEXT NOT NULL          -- 'schedule' | 'routine' | 'todo'
+name TEXT NOT NULL
+color TEXT NOT NULL
+isDefault INTEGER NOT NULL DEFAULT 0  -- 1이면 삭제 불가 ('기타' 카테고리)
+sortOrder INTEGER NOT NULL DEFAULT 0
+```
+- 인덱스: `idx_categories_type(type, sortOrder)`
+- 기본 시드 데이터 (총 13개): 일정 4개, 루틴 5개, 할일 4개
+- `database.ts` 초기화 시 race condition 방지: Promise 캐시(`initPromise`)로 시드 중복 삽입 방지
+- 앱 시작 시 중복 제거 SQL: `DELETE FROM categories WHERE id NOT IN (SELECT MIN(id) FROM categories GROUP BY type, name)`
+- `categoryDb.ts`: `getCategories`, `insertCategory`, `updateCategory`, `deleteCategory`
+  - `updateCategory`: 이름 변경 시 SQLite(routines/todos) + Supabase(schedules) 기존 항목 일괄 마이그레이션
+  - `deleteCategory`: 기존 항목을 '기타'로 변경 후 삭제, `isDefault=1`이면 차단
+
 ---
 
 ## 알람 시스템
@@ -114,21 +131,29 @@ createdAt TEXT NOT NULL
 
 ## 카테고리 색상
 
-### 일정/할일
+카테고리는 계정 탭에서 탭별(일정/루틴/할일)로 독립 관리 가능. 기본 시드 데이터:
+
+### 일정/할일 기본 카테고리
 ```
 업무=#6366F1 (인디고)
 개인=#10B981 (에메랄드)
 건강=#F59E0B (앰버)
-기타=#94A3B8 (슬레이트)
+기타=#94A3B8 (슬레이트) ← isDefault=1, 삭제 불가
 ```
 
-### 루틴
+### 루틴 기본 카테고리
 ```
 운동=#10B981 (에메랄드)
 공부=#6366F1 (인디고)
 청소=#06B6D4 (시안)
 관리=#F59E0B (앰버)
-기타=#94A3B8 (슬레이트)
+기타=#94A3B8 (슬레이트) ← isDefault=1, 삭제 불가
+```
+
+### 색상 팔레트 (8색, AccountScreen COLOR_PALETTE)
+```
+#6366F1 (인디고), #10B981 (에메랄드), #F59E0B (앰버), #EF4444 (레드)
+#3B82F6 (블루),   #EC4899 (핑크),     #8B5CF6 (퍼플),   #06B6D4 (시안)
 ```
 
 ---

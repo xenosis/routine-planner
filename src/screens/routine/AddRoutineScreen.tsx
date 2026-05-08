@@ -26,24 +26,13 @@ import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Routine } from '../../db/routineDb';
 import { toLocalDateStr } from '../../utils/date';
+import { useCategoryStore } from '../../store/categoryStore';
+import type { Category } from '../../db/categoryDb';
 
-// 카테고리별 대표 색상
-export const ROUTINE_CATEGORY_COLORS: Record<Routine['category'], string> = {
-  '운동': '#10B981',
-  '공부': '#6366F1',
-  '청소': '#06B6D4',
-  '관리': '#F59E0B',
-  '기타': '#94A3B8',
-};
-
-// 카테고리 선택 옵션
-const CATEGORY_OPTIONS: Array<{ value: Routine['category']; label: string }> = [
-  { value: '운동', label: '운동' },
-  { value: '공부', label: '공부' },
-  { value: '청소', label: '청소' },
-  { value: '관리', label: '관리' },
-  { value: '기타', label: '기타' },
-];
+// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
+function getCategoryColor(name: string, categories: Category[]): string {
+  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
+}
 
 // 요일 버튼 레이블 및 JS getDay() 매핑
 // 월(1) ~ 토(6) ~ 일(0) 순서
@@ -144,9 +133,21 @@ export default function AddRoutineScreen({
   const insets = useSafeAreaInsets();
   const isEditMode = Boolean(routine);
 
+  const routineCategories = useCategoryStore((s) => s.routineCategories);
+  const fetchCategories = useCategoryStore((s) => s.fetchCategories);
+
+  // 카테고리 목록 로드 (스토어가 비어 있을 때만)
+  useEffect(() => {
+    if (routineCategories.length === 0) {
+      fetchCategories('routine');
+    }
+  }, [routineCategories.length, fetchCategories]);
+
+  const defaultCategory = routineCategories[0]?.name ?? '운동';
+
   // 폼 상태
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState<Routine['category']>('운동');
+  const [category, setCategory] = useState<string>(defaultCategory);
   const [frequency, setFrequency] = useState<Routine['frequency']>('daily');
 
   // UI 상태
@@ -169,7 +170,7 @@ export default function AddRoutineScreen({
     } else {
       // 추가 모드 — 폼 초기화
       setTitle('');
-      setCategory('운동');
+      setCategory(defaultCategory);
       setFrequency('daily');
       setWeekdays([]);
       setWeeklyCount(3);
@@ -198,7 +199,7 @@ export default function AddRoutineScreen({
       id: routine?.id ?? generateId(),
       title: title.trim(),
       category,
-      color: ROUTINE_CATEGORY_COLORS[category],
+      color: getCategoryColor(category, routineCategories),
       frequency,
       // weekly_days: 루틴 예정 요일 / weekly_count: 알람 요일
       weekdays: (frequency === 'weekly_days' || frequency === 'weekly_count') ? weekdays : undefined,
@@ -293,7 +294,7 @@ export default function AddRoutineScreen({
                 left={
                   <TextInput.Icon
                     icon={() => (
-                      <View style={[styles.categoryDot, { backgroundColor: ROUTINE_CATEGORY_COLORS[category] }]} />
+                      <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(category, routineCategories) }]} />
                     )}
                   />
                 }
@@ -307,18 +308,18 @@ export default function AddRoutineScreen({
             />
             {showCategoryMenu && (
               <View style={[styles.categoryDropdown, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outline }]}>
-                {CATEGORY_OPTIONS.map((opt) => (
+                {routineCategories.map((opt) => (
                   <TouchableOpacity
-                    key={opt.value}
+                    key={opt.id}
                     style={[
                       styles.categoryOption,
-                      opt.value === category && { backgroundColor: theme.colors.primaryContainer },
+                      opt.name === category && { backgroundColor: theme.colors.primaryContainer },
                     ]}
-                    onPress={() => { setCategory(opt.value); setShowCategoryMenu(false); }}
+                    onPress={() => { setCategory(opt.name); setShowCategoryMenu(false); }}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.categoryDot, { backgroundColor: ROUTINE_CATEGORY_COLORS[opt.value] }]} />
-                    <Text style={{ color: theme.colors.onSurface }}>{opt.label}</Text>
+                    <View style={[styles.categoryDot, { backgroundColor: opt.color }]} />
+                    <Text style={{ color: theme.colors.onSurface }}>{opt.name}</Text>
                   </TouchableOpacity>
                 ))}
               </View>

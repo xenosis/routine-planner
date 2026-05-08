@@ -9,7 +9,7 @@ export interface Todo {
   title: string;
   deadlineDate: string;   // YYYY-MM-DD
   deadlineTime: string;   // HH:mm
-  category: '업무' | '개인' | '건강' | '기타';
+  category: string;
   color: string;          // hex color
   memo?: string;
   alarm: boolean;
@@ -56,7 +56,7 @@ function rowToTodo(row: TodoRow): Todo {
     title: row.title,
     deadlineDate: row.deadlineDate,
     deadlineTime: row.deadlineTime,
-    category: row.category as Todo['category'],
+    category: row.category,
     color: row.color,
     memo: row.memo ?? undefined,
     alarm: row.alarm === 1,

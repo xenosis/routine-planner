@@ -24,14 +24,13 @@ import TimeInput from '../../components/common/TimeInput';
 import type { Todo } from '../../db/todoDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
 import { toLocalDateStr } from '../../utils/date';
+import { useCategoryStore } from '../../store/categoryStore';
+import type { Category } from '../../db/categoryDb';
 
-// 카테고리별 대표 색상 (일정과 동일 팔레트)
-const CATEGORY_COLORS: Record<Todo['category'], string> = {
-  '업무': '#6366F1',
-  '개인': '#10B981',
-  '건강': '#F59E0B',
-  '기타': '#94A3B8',
-};
+// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
+function getCategoryColor(name: string, categories: Category[]): string {
+  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
+}
 
 // 알람 프리셋 (분 단위) — 마감 기준 N분 전
 const ALARM_PRESETS = [
@@ -52,13 +51,6 @@ const TIME_UNITS = [
 
 type TimeUnit = 'min' | 'hour' | 'day' | 'week';
 
-// 카테고리 선택 옵션
-const CATEGORY_OPTIONS: Array<{ value: Todo['category']; label: string }> = [
-  { value: '업무', label: '업무' },
-  { value: '개인', label: '개인' },
-  { value: '건강', label: '건강' },
-  { value: '기타', label: '기타' },
-];
 
 /**
  * 분 단위를 사람이 읽기 쉬운 문자열로 변환한다.
@@ -103,11 +95,24 @@ export default function AddTodoScreen({
   const insets = useSafeAreaInsets();
   const isEditMode = Boolean(todo);
 
+  const todoCategories = useCategoryStore((s) => s.todoCategories);
+  const fetchCategories = useCategoryStore((s) => s.fetchCategories);
+
+  // 카테고리 목록 로드 (스토어가 비어 있을 때만)
+  useEffect(() => {
+    if (todoCategories.length === 0) {
+      fetchCategories('todo');
+    }
+  }, [todoCategories.length, fetchCategories]);
+
+  // 기본 카테고리: 로드된 목록의 첫 번째 또는 '개인'
+  const defaultCategory = todoCategories[0]?.name ?? '개인';
+
   // 폼 상태
   const [title, setTitle] = useState('');
   const [deadlineDate, setDeadlineDate] = useState(toLocalDateStr());
   const [deadlineTime, setDeadlineTime] = useState('09:00');
-  const [category, setCategory] = useState<Todo['category']>('개인');
+  const [category, setCategory] = useState<string>(defaultCategory);
   const [memo, setMemo] = useState('');
   const [alarmEnabled, setAlarmEnabled] = useState(false);
 
@@ -136,7 +141,7 @@ export default function AddTodoScreen({
       setTitle('');
       setDeadlineDate(toLocalDateStr());
       setDeadlineTime('09:00');
-      setCategory('개인');
+      setCategory(defaultCategory);
       setMemo('');
       setAlarmEnabled(false);
       setAlarmTimes([]);
@@ -205,7 +210,7 @@ export default function AddTodoScreen({
       deadlineDate,
       deadlineTime,
       category,
-      color: CATEGORY_COLORS[category],
+      color: getCategoryColor(category, todoCategories),
       memo: memo.trim() || undefined,
       alarm: hasAlarm,
       alarmTimes: hasAlarm ? alarmTimes : undefined,
@@ -340,7 +345,7 @@ export default function AddTodoScreen({
                       <View
                         style={[
                           styles.categoryDot,
-                          { backgroundColor: CATEGORY_COLORS[category] },
+                          { backgroundColor: getCategoryColor(category, todoCategories) },
                         ]}
                       />
                     )}
@@ -372,17 +377,17 @@ export default function AddTodoScreen({
                   },
                 ]}
               >
-                {CATEGORY_OPTIONS.map((opt) => (
+                {todoCategories.map((opt) => (
                   <TouchableOpacity
-                    key={opt.value}
+                    key={opt.id}
                     style={[
                       styles.categoryOption,
-                      opt.value === category && {
+                      opt.name === category && {
                         backgroundColor: theme.colors.primaryContainer,
                       },
                     ]}
                     onPress={() => {
-                      setCategory(opt.value);
+                      setCategory(opt.name);
                       setShowCategoryMenu(false);
                     }}
                     activeOpacity={0.7}
@@ -390,7 +395,7 @@ export default function AddTodoScreen({
                     <View
                       style={[
                         styles.menuDot,
-                        { backgroundColor: CATEGORY_COLORS[opt.value] },
+                        { backgroundColor: opt.color },
                       ]}
                     />
                     <Text
@@ -399,7 +404,7 @@ export default function AddTodoScreen({
                         { color: theme.colors.onSurface },
                       ]}
                     >
-                      {opt.value}
+                      {opt.name}
                     </Text>
                   </TouchableOpacity>
                 ))}

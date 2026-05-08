@@ -14,7 +14,7 @@ export interface Schedule {
   endDate?: string;     // YYYY-MM-DD (종료일), 단일 일정이면 undefined
   startTime: string;    // HH:mm
   endTime: string;      // HH:mm
-  category: '업무' | '개인' | '건강' | '기타';
+  category: string;
   color: string;
   memo?: string;
   alarm: boolean;
@@ -39,7 +39,7 @@ function rowToSchedule(row: any): Schedule {
     endDate: row.endDate ?? undefined,
     startTime: row.startTime,
     endTime: row.endTime,
-    category: row.category as Schedule['category'],
+    category: row.category,
     color: row.color,
     memo: row.memo ?? undefined,
     alarm: Boolean(row.alarm),

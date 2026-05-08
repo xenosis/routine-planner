@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, useTheme } from 'react-native-paper';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 
@@ -16,6 +16,8 @@ import { useAuthStore } from '../store/authStore';
 import { navigationRef, consumePendingNotifType, navigateToTab } from '../utils/navigationRef';
 import { getRepeatSchedulesWithAlarm } from '../db/scheduleDb';
 import { scheduleNextRepeatAlarm } from '../utils/scheduleAlarms';
+import { initDatabase } from '../db/database';
+import { useCategoryStore } from '../store/categoryStore';
 
 export type RootTabParamList = {
   Schedule: undefined;
@@ -71,16 +73,35 @@ export default function AppNavigator(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { session, loading, initialize } = useAuthStore();
+  const [dbReady, setDbReady] = React.useState(false);
+  const fetchAllCategories = useCategoryStore((s) => s.fetchAllCategories);
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  // 세션 확인 후 SQLite DB 초기화 — 각 스크린에서 중복 초기화하지 않도록 여기서 한 번만 실행
+  useEffect(() => {
+    if (!loading && session) {
+      initDatabase()
+        .then(() => {
+          setDbReady(true);
+          reRegisterMissingRepeatAlarms();
+          // DB 초기화 완료 후 카테고리 데이터 전체 로드
+          fetchAllCategories().catch(() => {});
+        })
+        .catch(() => {
+          // DB 초기화 실패 시에도 앱은 계속 진행 (data fetch에서 개별 에러 처리)
+          setDbReady(true);
+        });
+    }
+  }, [loading, session]);
+
   // 앱 killed 상태에서 알림으로 진입한 경우: auth 로딩 완료 후 탭 이동
   // loading 완료 시점에 Tab.Navigator가 아직 mount 중일 수 있으므로
   // navigationRef.isReady()가 true가 될 때까지 rAF로 대기
   useEffect(() => {
-    if (!loading) {
+    if (!loading && dbReady) {
       const type = consumePendingNotifType();
       if (type) {
         const tryNavigate = () => {
@@ -93,16 +114,9 @@ export default function AppNavigator(): React.JSX.Element {
         requestAnimationFrame(tryNavigate);
       }
     }
-  }, [loading]);
+  }, [loading, dbReady]);
 
-  // 로그인 완료 후 반복 알람 누락 체크 — 앱이 종료된 사이 발생했을 반복 알람을 재등록
-  useEffect(() => {
-    if (!loading && session) {
-      reRegisterMissingRepeatAlarms();
-    }
-  }, [loading, session]);
-
-  if (loading) {
+  if (loading || (session !== null && !dbReady)) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
