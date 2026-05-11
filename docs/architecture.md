@@ -22,6 +22,8 @@ src/
   utils/
     date.ts            - 로컬 타임존 날짜 유틸 (toLocalDateStr)
     nameTag.ts         - 이름표 색상 팔레트 + getNameColor (해시 fallback용)
+    widgetSync.ts      - Android 홈 화면 위젯 데이터 동기화 (WidgetModule 브리지)
+    pushTokenManager.ts - Expo 푸시 토큰 발급 + Supabase user_push_tokens 저장
   screens/
     auth/
       LoginScreen.tsx        - 이메일/비밀번호 로그인 화면
@@ -63,7 +65,7 @@ src/
 ## 네비게이션 (AppNavigator)
 - 탭 순서: **일정 / 할일 / 루틴 / 성과 / 계정**
 - 인증 게이트: `authStore.session` 없으면 → `LoginScreen` 표시, 있으면 → 탭 네비게이터
-- **DB 초기화 게이트**: `initDatabase()` 완료 전(`dbReady: false`)까지 스피너 표시, 완료 후 카테고리 전체 로드
+- **DB 초기화 게이트**: `initDatabase()` 완료 전(`dbReady: false`)까지 스피너 표시, 완료 후 카테고리 전체 로드 + `syncWidgetNow()` 호출
   - 이전에 각 Screen에서 개별 호출하던 방식 → AppNavigator 중앙화로 통합
   - killed 상태 푸시 알림 진입 시 데이터 미로드 버그 수정
 
@@ -98,12 +100,14 @@ schedules: Schedule[]
 markedDates: Record<string, string[]> // 캘린더 dot 표시용 (날짜 → 색상 배열)
 rangeEvents: { startDate: string; endDate: string; color: string }[] // range bar용
 
-setSelectedDate(date)           // 날짜 선택 → fetchByDate
+setSelectedDate(date)           // 날짜 선택 → fetchByDate + syncWidgetSelectedDate
 clearSelectedDate()             // 선택 해제 → fetchByMonth
 fetchByDate(date)
-fetchByMonth(year, month)       // 월 전체 일정 (과거 포함)
+fetchByMonth(year, month)       // 월 전체 일정 (과거 포함) + syncWidgetData
 fetchMarkedDates(year, month)   // getMarkedDates + getMultiDayEventsForMonth 병렬 호출
-addSchedule / updateSchedule / deleteSchedule
+syncWidgetNow()                 // 앱 시작 시 당월 일정 로드 → widget_schedules.json 기록 (non-blocking)
+addSchedule(schedule)           // insert + 뷰 갱신 + Edge Function 'notify-schedule' 호출 + 위젯 파일 갱신
+updateSchedule / deleteSchedule // 완료 후 위젯 파일 갱신 (백그라운드)
 setupRealtimeSubscription()     // Supabase 실시간 구독 시작 (ScheduleScreen에서 호출)
 ```
 
@@ -168,6 +172,103 @@ toggleCompleted(id)            // 완료 토글 + 알람 처리 + fetchTodos
 - **앱 실행 중/백그라운드**: `addNotificationResponseReceivedListener` → `navigateToTab()` 즉시 호출
 - **앱 완전 종료(killed)**: `getLastNotificationResponseAsync()` → `setPendingNotifType()` 저장 → AppNavigator auth 완료 후 `consumePendingNotifType()` 처리
   - 이유: killed 상태에서는 `navigationRef.isReady()` false이고 탭 네비게이터도 미마운트
+
+---
+
+---
+
+## Android 홈 화면 위젯
+
+### 아키텍처
+```
+React Native JS (scheduleStore.syncWidgetNow / addSchedule / updateSchedule / deleteSchedule)
+  → syncWidgetData(year, month, schedules)   [src/utils/widgetSync.ts]
+  → WidgetModule.updateData(json, year, month) [RN Native Module]
+  → widget_schedules.json                    [context.filesDir — 크로스 프로세스 안전]
+  → SharedPreferences (doro_widget_prefs)    [연/월/선택날짜만]
+  → CalendarWidgetProvider.kt               [AppWidgetProvider — 달력 렌더링]
+  → RemoteViews                             [월간 그리드 + 이벤트 목록]
+```
+위젯은 `:widget` 별개 프로세스 → SharedPreferences 인메모리 캐시 신뢰 불가 → 일정은 파일로 저장
+
+### 데이터 저장 분리
+| 데이터 | 저장 위치 |
+|--------|-----------|
+| 월별 일정 JSON | `context.filesDir/widget_schedules.json` (파일) |
+| 표시 연/월 | SharedPreferences `WIDGET_YEAR` / `WIDGET_MONTH` |
+| 선택 날짜 | SharedPreferences `WIDGET_SELECTED_DATE` (YYYY-MM-DD) |
+
+### Native 파일 (android/.../com/sewoong/routineplanner/)
+| 파일 | 설명 |
+|------|------|
+| `WidgetDataCache.kt` | 파일 + SharedPreferences 읽기/쓰기 singleton. 일정은 `widget_schedules.json`으로 저장 |
+| `WidgetModule.kt` | RN Native Module (`updateData`, `updateSelectedDate`, `getLaunchDate`) |
+| `WidgetPackage.kt` | ReactPackage 등록 |
+| `CalendarWidgetProvider.kt` | AppWidgetProvider (달력 렌더링 + 브로드캐스트 처리). root에 tap-to-open PendingIntent |
+| `CalendarWidgetService.kt` | RemoteViewsService (이벤트 목록) |
+| `CalendarWidgetFactory.kt` | RemoteViewsFactory (이벤트 목록, nameTag 표시 지원) |
+| `MainApplication.kt` | `isMainProcess()` 체크 — `:widget` 프로세스에서 RN 초기화 차단 |
+
+### 위젯 크기
+- **Medium**: 4×3 (`widget_medium_info.xml`)
+- **Large**: 4×5 (`widget_large_info.xml`)
+
+### 인터랙션
+- **위젯 아무 곳 탭** → MainActivity 실행 (앱 열기, root PendingIntent)
+- 날짜 셀 탭 → Broadcast → 선택 날짜 갱신 + 이벤트 목록 업데이트 → 앱 열기
+- 이전/다음 달 버튼 → Broadcast → 연/월 갱신 + 달력 재렌더링 (**Medium만 처리** — Large는 등록하지 않음, 2달 점프 버그 방지)
+- 이벤트 항목 탭 → `WIDGET_TAP_DATE` extra로 MainActivity 실행 → `WidgetModule.getLaunchDate()`로 날짜 읽기 → 해당 날짜로 네비게이션
+
+### 위젯에서 앱 열기 + 날짜 이동 (`getLaunchDate` 흐름)
+```
+위젯 이벤트 탭
+  → Intent extra: WIDGET_TAP_DATE = "2026-05-10"
+  → MainActivity 실행
+  → App.tsx useEffect: WidgetModule.getLaunchDate() 호출
+  → 날짜 반환 + intent에서 제거 (중복 방지)
+  → navigationRef.isReady() 대기 (rAF 재귀)
+  → navigateToTab('schedule') + setSelectedDate(date)
+```
+
+### 데이터 동기화
+- **앱 시작 시**: `AppNavigator` DB 초기화 완료 후 `syncWidgetNow()` 자동 호출 → 당월 일정 Supabase에서 로드 → 파일 기록
+- **일정 추가/수정/삭제**: `scheduleStore` 각 액션 완료 후 백그라운드로 파일 갱신 (non-blocking)
+- **날짜 선택**: `setSelectedDate()` → `syncWidgetSelectedDate()` → SharedPreferences 갱신
+
+### RemoteViews 제약
+- **`<View>` 사용 불가** — Android RemoteViews 허용 클래스 화이트리스트에 없음
+- 레이아웃에서 `<View>` 사용 시 위젯 추가 불가 + "로드중..." stuck 오류 발생
+- 반드시 `<TextView>`, `<ImageView>`, `<LinearLayout>`, `<FrameLayout>` 등 허용 클래스 사용
+
+### Gradle 증분 빌드 주의 (Windows)
+- `scripts/build-apk.ps1`: 빌드 전 모든 `.kt` 파일 `LastWriteTime` 갱신 → Gradle 강제 재컴파일
+- 파일 내용이 같아도 타임스탬프가 동일하면 Gradle이 캐시를 사용해 변경 미반영
+
+**주의**: 위젯은 Expo Go에서 동작하지 않음 (커스텀 native module). 릴리즈 APK로만 테스트 가능.
+
+---
+
+## 크로스 유저 푸시 알림
+
+### 아키텍처
+```
+앱에서 일정 추가 (addSchedule)
+  → supabase.functions.invoke('notify-schedule', { schedule, sender_id, sender_name })
+  → Edge Function: user_push_tokens에서 발신자 제외 토큰 조회
+  → Expo Push API (https://exp.host/--/api/v2/push/send)
+  → 상대방 기기 푸시 알림 수신
+```
+
+### 관련 파일
+- `supabase/functions/notify-schedule/index.ts` — Deno Edge Function
+- `src/utils/pushTokenManager.ts` — 토큰 발급 + Supabase 저장
+- `authStore.signIn()` — 로그인 성공 시 `registerPushToken(userId)` 호출
+- `scheduleStore.addSchedule()` — insert 후 Edge Function invoke
+
+### 주의사항
+- Expo 푸시 토큰은 릴리즈 APK(프로덕션 빌드)에서만 발급 가능 (개발 빌드 시 null)
+- Edge Function 배포: `supabase functions deploy notify-schedule`
+- `user_push_tokens` 테이블 생성 + RLS 설정 필요 (Supabase 대시보드 SQL Editor)
 
 ---
 

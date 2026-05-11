@@ -85,6 +85,47 @@ sortOrder INTEGER NOT NULL DEFAULT 0
   - `updateCategory`: 이름 변경 시 SQLite(routines/todos) + Supabase(schedules) 기존 항목 일괄 마이그레이션
   - `deleteCategory`: 기존 항목을 '기타'로 변경 후 삭제, `isDefault=1`이면 차단
 
+### user_push_tokens 테이블 — Supabase (PostgreSQL)
+```sql
+user_id    UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY
+push_token TEXT NOT NULL
+updated_at TIMESTAMPTZ DEFAULT NOW()
+```
+- RLS: `FOR ALL USING (auth.uid() = user_id)` — 자신의 토큰만 insert/update
+- Edge Function은 service_role로 전체 조회 (발신자 제외)
+- 생성 SQL:
+  ```sql
+  CREATE TABLE user_push_tokens (
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+    push_token TEXT NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+  );
+  ALTER TABLE user_push_tokens ENABLE ROW LEVEL SECURITY;
+  CREATE POLICY "Users can manage own token" ON user_push_tokens
+    FOR ALL USING (auth.uid() = user_id);
+  ```
+
+---
+
+## Android 위젯 SharedPreferences (`doro_widget_prefs`)
+
+| 키 | 타입 | 설명 |
+|----|------|------|
+| `WIDGET_YEAR` | Int | 현재 표시 중인 연도 |
+| `WIDGET_MONTH` | Int (1-12) | 현재 표시 중인 월 |
+| `WIDGET_SELECTED_DATE` | String (YYYY-MM-DD) | 선택된 날짜 |
+| `WIDGET_SCHEDULE_DATA` | JSON String | 월별 일정 캐시 |
+
+JSON 형식:
+```json
+{
+  "2026-05": [
+    {"id":"...","title":"...","date":"2026-05-15","endDate":null,
+     "startTime":"09:00","endTime":"10:00","color":"#6366F1","category":"업무"}
+  ]
+}
+```
+
 ---
 
 ## 알람 시스템

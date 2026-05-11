@@ -21,6 +21,14 @@
 - 세션 초기화: `authStore.initialize()` — `supabase.auth.getSession()` + onAuthStateChange 구독
 - 이름표 저장: `supabase.auth.updateUser({ data: { display_name, name_color } })`
 - `authStore.updateDisplayName(name, color)` → user_metadata 업데이트 + 로컬 상태 동기화
+- 로그인 성공 시: `registerPushToken(userId)` 자동 호출 → `user_push_tokens` upsert
+
+### Edge Functions
+- **`notify-schedule`**: 일정 추가 시 다른 모든 사용자에게 푸시 알림 발송
+  - 호출: `supabase.functions.invoke('notify-schedule', { body: { schedule, sender_id, sender_name } })`
+  - 처리: `user_push_tokens`에서 sender 제외 전체 토큰 조회 → Expo Push API 호출
+  - 알림 형식: 제목 `"{name}님이 일정을 추가했어요"`, 본문 `"{title} · {date} {startTime}"`
+  - 배포: `supabase functions deploy notify-schedule`
 
 ### scheduleDb 컬럼 매핑
 - DB 컬럼 `participants` → 앱 내부 `nameTag` 필드로 매핑

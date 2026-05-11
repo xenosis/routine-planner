@@ -6,9 +6,19 @@
 # Metro 번들러 시작 (Expo Go 앱으로 테스트)
 npm start
 
+# Metro 캐시 클리어 후 시작 (라이브러리 버전 변경 후 필수)
+npx expo start --clear
+
 # 단위 테스트 실행
 npm test
 ```
+
+### Expo Go 호환성 주의사항
+- **Expo Go SDK 54 내장 버전**: `react-native-reanimated ~4.1.1` + `react-native-worklets 0.5.1`
+- 프로젝트도 동일 버전 사용 (`reanimated 4.1.1`, `worklets 0.5.1` 정확 고정)
+- 버전 불일치 시: `TurboModule method "installTurboModule" called with 1 arguments (expected 0)` 에러
+- **Android 위젯(WidgetModule)은 Expo Go에서 동작 안 함** — 릴리즈 APK로만 테스트 가능
+- 커스텀 native module이 필요한 기능 개발 시: `expo run:android` (USB/무선 ADB 연결 필요)
 
 ---
 
@@ -67,9 +77,13 @@ powershell -File scripts/setup-android.ps1
 npm run build:apk
 ```
 
-결과물: 프로젝트 루트의 **`doro.apk`**
+결과물: 프로젝트 루트의 **`doro-v{버전}.apk`** (버전은 `app.json`에서 자동 읽음)
 
-> 내부적으로 `scripts/build-apk.ps1` 실행 → `android/gradlew assembleRelease` → 루트에 `doro.apk` 복사.
+> 내부적으로 `scripts/build-apk.ps1` 실행:
+> 1. `app.json`에서 버전 읽기
+> 2. 모든 `.kt` 파일 `LastWriteTime` 갱신 (Gradle 강제 재컴파일 — Windows에서 증분 빌드가 변경을 감지 못하는 버그 방지)
+> 3. `android/gradlew assembleRelease`
+> 4. 루트에 `doro-v{버전}.apk` 복사
 
 ### 문제 해결
 
