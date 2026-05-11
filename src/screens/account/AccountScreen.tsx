@@ -3,6 +3,7 @@ import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, IconButton, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { spacing, borderRadius } from '../../theme';
 import { useAuthStore } from '../../store/authStore';
 import { useCategoryStore } from '../../store/categoryStore';
@@ -222,6 +223,7 @@ export default function AccountScreen(): React.JSX.Element {
   const addCategory = useCategoryStore((s) => s.addCategory);
   const editCategory = useCategoryStore((s) => s.editCategory);
   const removeCategory = useCategoryStore((s) => s.removeCategory);
+  const reorderCategories = useCategoryStore((s) => s.reorderCategories);
 
   useEffect(() => {
     fetchAllCategories();
@@ -407,46 +409,66 @@ export default function AccountScreen(): React.JSX.Element {
               카테고리가 없습니다
             </Text>
           ) : (
-            currentCategories.map((cat, index) => (
-              <View key={cat.id}>
-                <View style={styles.categoryRow}>
-                  {/* 색상 원 + 이름 */}
-                  <View style={[styles.categoryDot, { backgroundColor: cat.color }]} />
-                  <Text style={[styles.categoryName, { color: theme.colors.onSurface }]}>
-                    {cat.name}
-                  </Text>
-                  {cat.isDefault && (
-                    <Text style={[styles.defaultBadge, { color: theme.colors.onSurfaceVariant }]}>
-                      기본
-                    </Text>
-                  )}
-                  <View style={styles.categoryActions}>
-                    {/* 수정 버튼 */}
-                    <IconButton
-                      icon="pencil-outline"
-                      size={18}
-                      iconColor={theme.colors.onSurfaceVariant}
-                      onPress={() => handleEditPress(cat)}
-                      style={styles.actionBtn}
-                    />
-                    {/* 기본 카테고리(기타)는 삭제 불가 */}
-                    {!cat.isDefault && (
-                      <IconButton
-                        icon="trash-can-outline"
-                        size={18}
-                        iconColor={theme.colors.error}
-                        onPress={() => handleDeletePress(cat)}
-                        style={styles.actionBtn}
-                      />
-                    )}
-                  </View>
-                </View>
-                {/* 마지막 항목 아래 구분선 없음 */}
-                {index < currentCategories.length - 1 && (
-                  <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
-                )}
-              </View>
-            ))
+            <DraggableFlatList
+              data={currentCategories}
+              keyExtractor={(item) => item.id}
+              onDragEnd={({ data }) => reorderCategories(activeTab, data)}
+              scrollEnabled={false}
+              renderItem={({ item, drag, isActive, getIndex }: RenderItemParams<Category>) => {
+                const index = getIndex() ?? 0;
+                const isLast = index === currentCategories.length - 1;
+                return (
+                  <ScaleDecorator>
+                    <View>
+                      <View style={[
+                        styles.categoryRow,
+                        isActive && { backgroundColor: theme.colors.surfaceVariant },
+                      ]}>
+                        {/* 드래그 핸들 */}
+                        <TouchableOpacity onPressIn={drag} style={styles.dragHandle}>
+                          <MaterialCommunityIcons
+                            name="drag-horizontal-variant"
+                            size={18}
+                            color={theme.colors.outline}
+                          />
+                        </TouchableOpacity>
+                        <View style={[styles.categoryDot, { backgroundColor: item.color }]} />
+                        <Text style={[styles.categoryName, { color: theme.colors.onSurface }]}>
+                          {item.name}
+                        </Text>
+                        {item.isDefault ? (
+                          /* 기본(기타) 카테고리: '기본' 레이블만 표시 */
+                          <Text style={[styles.defaultBadge, { color: theme.colors.onSurfaceVariant }]}>
+                            기본
+                          </Text>
+                        ) : (
+                          <View style={styles.categoryActions}>
+                            <IconButton
+                              icon="pencil-outline"
+                              size={18}
+                              iconColor={theme.colors.onSurfaceVariant}
+                              onPress={() => handleEditPress(item)}
+                              style={styles.actionBtn}
+                            />
+                            <IconButton
+                              icon="trash-can-outline"
+                              size={18}
+                              iconColor={theme.colors.error}
+                              onPress={() => handleDeletePress(item)}
+                              style={styles.actionBtn}
+                            />
+                          </View>
+                        )}
+                      </View>
+                      {/* 마지막 항목 아래 구분선 없음 */}
+                      {!isLast && (
+                        <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+                      )}
+                    </View>
+                  </ScaleDecorator>
+                );
+              }}
+            />
           )}
         </Surface>
 
@@ -589,14 +611,21 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.base,
     borderRadius: borderRadius.md,
     paddingVertical: spacing.xs,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   categoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.base,
+    paddingLeft: spacing.xs,
+    paddingRight: spacing.xs,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  dragHandle: {
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
-    gap: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   categoryDot: {
     width: 12,
@@ -609,7 +638,7 @@ const styles = StyleSheet.create({
   },
   defaultBadge: {
     fontSize: 11,
-    marginRight: spacing.xs,
+    marginRight: spacing.base,
   },
   categoryActions: {
     flexDirection: 'row',

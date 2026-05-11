@@ -166,3 +166,26 @@ export async function deleteCategory(
 
   await db.runAsync('DELETE FROM categories WHERE id = ?', [id]);
 }
+
+/**
+ * 두 카테고리의 sortOrder를 교환한다 (순서 이동에 사용).
+ */
+export async function swapCategoryOrder(
+  idA: string, sortOrderA: number,
+  idB: string, sortOrderB: number,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('UPDATE categories SET sortOrder = ? WHERE id = ?', [sortOrderB, idA]);
+  await db.runAsync('UPDATE categories SET sortOrder = ? WHERE id = ?', [sortOrderA, idB]);
+}
+
+/**
+ * 드래그앤드롭 후 카테고리 순서를 일괄 업데이트한다.
+ * items 배열 순서대로 sortOrder를 0부터 재할당한다.
+ */
+export async function setCategoryOrder(items: Array<{ id: string; sortOrder: number }>): Promise<void> {
+  const db = await getDb();
+  for (const item of items) {
+    await db.runAsync('UPDATE categories SET sortOrder = ? WHERE id = ?', [item.sortOrder, item.id]);
+  }
+}

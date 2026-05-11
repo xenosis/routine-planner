@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
-import { Alert, Linking, Platform, useColorScheme } from 'react-native';
+import { Alert, Linking, NativeModules, Platform, useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +13,7 @@ import { lightTheme, darkTheme } from './src/theme';
 import { navigationRef, navigateToTab, setPendingNotifType, consumePendingNotifType } from './src/utils/navigationRef';
 import { getScheduleById } from './src/db/scheduleDb';
 import { scheduleNextRepeatAlarm } from './src/utils/scheduleAlarms';
+import { useScheduleStore } from './src/store/scheduleStore';
 
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
@@ -114,6 +116,29 @@ export default function App(): React.JSX.Element {
       requestAnimationFrame(tryNavigate);
     });
 
+    // 위젯 이벤트 탭으로 앱이 실행된 경우 해당 날짜로 일정 탭 이동
+    if (Platform.OS === 'android') {
+      const { WidgetModule } = NativeModules;
+      if (WidgetModule?.getLaunchDate) {
+        WidgetModule.getLaunchDate().then((date: string | null) => {
+          if (!date) return;
+          const tryNavigate = () => {
+            if (navigationRef.isReady()) {
+              // 일정 탭으로 이동하고 해당 날짜 선택
+              navigateToTab('schedule');
+              // 탭 전환 애니메이션 완료 후 날짜 선택
+              setTimeout(() => {
+                useScheduleStore.getState().setSelectedDate(date);
+              }, 300);
+            } else {
+              requestAnimationFrame(tryNavigate);
+            }
+          };
+          requestAnimationFrame(tryNavigate);
+        }).catch(() => {});
+      }
+    }
+
     // 앱이 실행 중이거나 백그라운드일 때 알림 탭 (이미 준비됐으므로 바로 navigate)
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const type = response.notification.request.content.data?.type as string | undefined;
@@ -134,13 +159,15 @@ export default function App(): React.JSX.Element {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <PaperProvider theme={theme}>
-        <NavigationContainer ref={navigationRef}>
-          <AppNavigator />
-        </NavigationContainer>
-        <StatusBar style={isDarkMode ? 'light' : 'dark'} />
-      </PaperProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <NavigationContainer ref={navigationRef}>
+            <AppNavigator />
+          </NavigationContainer>
+          <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+        </PaperProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

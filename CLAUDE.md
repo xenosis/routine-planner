@@ -66,6 +66,8 @@
 - **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립, 삭제·변경 시 '기타'로 마이그레이션
   - `database.ts` 시드: 일정 4 + 루틴 5 + 할일 4 = 13개 기본 카테고리
   - DB 초기화 race condition 방지: `initPromise` 캐시로 시드 중복 삽입 방지
+  - **드래그앤드롭 순서 변경**: `react-native-draggable-flatlist` — `reorderCategories` 낙관적 업데이트 후 `setCategoryOrder` DB 일괄 저장
+  - `App.tsx`에 `GestureHandlerRootView` 필수 (`index.ts`에 `react-native-gesture-handler` import 선행)
 - **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 (`dbReady` 게이트)
   - DB 완료 후 카테고리 전체 로드 (`fetchAllCategories`) + 위젯 즉시 동기화 (`syncWidgetNow`)
 - **성과탭**: `getThisWeekDays(today)` 기준 주간 달성률 / `weekly_count` 루틴은 오늘 목록·헤더·완료 카운트에서 항상 제외
