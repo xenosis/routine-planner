@@ -10,10 +10,14 @@
 - 차트: react-native-gifted-charts
 - 지도: react-native-webview + 카카오 지도 JS API (장소 검색 모달)
 - 네비게이션: react-navigation (bottom-tabs + stack)
-- UI: React Native Paper v5
-- 상태관리: Zustand
+- UI: React Native Paper v5 / 상태관리: Zustand
 - 달력: 자체 구현 MonthCalendar (react-native-calendars는 성과 탭 월간뷰에만 사용)
 - 빌드: EAS Build (preview: APK, production: AAB)
+
+## 버전 관리 정책
+버그 수정·기능 변경 시 반드시 버전을 올릴 것. 항상 세 파일 동시 수정:
+`app.json` / `android/app/build.gradle` (versionCode +1, versionName) / `package.json`
+- `patch` (1.0.x): 버그 수정 / `minor` (1.x.0): 새 기능 / `major` (x.0.0): 대규모 변경
 
 ## 라이브러리 정책
 - 새 라이브러리 필요 시 사용자에게 먼저 물어볼 것
@@ -45,30 +49,13 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-09 기준)
+## 현재 구현 상태 (2026-05-11, v1.2.0)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
 
-### 파일 구조 요약
-```
-src/
-  db/       - database.ts, scheduleDb.ts, routineDb.ts, achievementDb.ts, todoDb.ts
-              categoryDb.ts  ← 카테고리 CRUD (탭별 독립, 삭제/수정 시 기존 항목 '기타'로 마이그레이션)
-  lib/      - supabase.ts
-  store/    - authStore.ts, scheduleStore.ts, routineStore.ts, todoStore.ts
-              categoryStore.ts  ← 카테고리 Zustand 스토어
-  utils/    - date.ts, nameTag.ts, navigationRef.ts, scheduleAlarms.ts
-              achievementCalc.ts, streakCalc.ts, repeatDate.ts  ← 순수 계산 함수 (테스트 대상)
-  screens/  - auth/, account/, schedule/, routine/, todo/, achievement/
-  components/ - calendar/MonthCalendar, common/TimeInput, schedule/, routine/, todo/
-  navigation/ - AppNavigator.tsx
-  theme/    - index.ts
-__tests__/  - achievementCalc.test.ts, streakCalc.test.ts, repeatDate.test.ts
-              database.test.ts  ← initDatabase race condition 방지 테스트
-scripts/    - make-notification-icon.js
-```
-→ 상세: `docs/architecture.md`
+### 파일 구조
+→ `docs/architecture.md`
 
 ### 핵심 구현 사항
 → 세부 계산 로직: `docs/api-patterns.md` / 알람 전략: `docs/architecture.md`
@@ -76,34 +63,38 @@ scripts/    - make-notification-icon.js
 - **일정**: Supabase 연동, 반복 일정 (`matchesRepeatDate` → `src/utils/repeatDate.ts`), 여러날/이름표/장소
 - **루틴**: daily / weekly_days / weekly_count, 스트릭 계산 (`src/utils/streakCalc.ts`)
 - **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`)
-- **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 일정/루틴/할일 탭별 독립 커스터마이징
-  - 계정 탭에서 추가/수정/삭제; 삭제·이름 변경 시 기존 항목 '기타'로 자동 마이그레이션
+- **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립, 삭제·변경 시 '기타'로 마이그레이션
   - `database.ts` 시드: 일정 4 + 루틴 5 + 할일 4 = 13개 기본 카테고리
   - DB 초기화 race condition 방지: `initPromise` 캐시로 시드 중복 삽입 방지
-- **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 실행 (`dbReady` 게이트)
-  - killed 상태 푸시 알림 진입 시 데이터 미로드 버그 수정
-  - DB 초기화 완료 후 카테고리 전체 로드 (`fetchAllCategories`)
-- **성과탭 주간 달성률**: `getThisWeekDays(today)` 기준 (최근 7일 X), 루틴별 계산 후 평균
-  - `weekly_days` 이번 주 예정일 없는 루틴은 `null` 반환 → 평균 제외 (분모 왜곡 방지)
-  - 주간 차트 0%인 날은 "0%" 레이블 표시
-- **성과탭 월간/루틴별**: `quotaMetBeforeThisDay` 집합으로 weekly_count quota 달성 루틴 분모 제외
-- **루틴 탭 오늘 목록**: `weekly_count` quota 달성 AND 오늘 미체크 시 목록에서 제외 (목록 표시·체크는 가능, 헤더 카운트·진행률 바에서 항상 제외)
-- **루틴 탭 헤더 카운트/진행률**: `weekly_count` 루틴 전체 제외 (`countableRoutines`) — 주간 달성률에만 포함
-- **성과탭 오늘 완료**: `weekly_count` 루틴 제외 (`weeklyCountIds` Set 사용) — 주간 달성률에만 포함
+- **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 (`dbReady` 게이트)
+  - DB 완료 후 카테고리 전체 로드 (`fetchAllCategories`) + 위젯 즉시 동기화 (`syncWidgetNow`)
+- **성과탭**: `getThisWeekDays(today)` 기준 주간 달성률 / `weekly_count` 루틴은 오늘 목록·헤더·완료 카운트에서 항상 제외
+- **Android 홈 화면 위젯**: Medium(4×3) / Large(4×5) 월간 달력, Kotlin AppWidgetProvider
+  - 위젯 4종: 불투명(Medium/Large) + 투명(Medium/Large) — `CalendarWidgetProvider`의 `abstract getLayoutId()`로 분기
+  - 투명 버전: `widget_calendar_transparent.xml` (배경 없음, 텍스트 드롭 섀도우 적용)
+  - 요일 헤더: 날짜 숫자와 동일한 18sp, 날짜 셀 28dp × 28dp (컴팩트)
+  - 이벤트 탭 PendingIntent template은 반드시 **`FLAG_MUTABLE`** (FLAG_IMMUTABLE 시 fillIn extras 병합 안 됨)
+  - 위젯 탭 → 앱 복귀: `MainActivity.onNewIntent → setIntent(intent)` + JS `AppState` 리스너 → `getLaunchDate()`
+  - **RemoteViews 제약**: `<View>` 사용 불가 — `<TextView>`, `<ImageView>` 등 허용 클래스만
+  - **Expo Go / 디버그 빌드에서 동작 안 함** — 릴리즈 APK에서만 테스트 가능
+- **크로스 유저 푸시 알림**: `addSchedule()` → Edge Function `notify-schedule` → Expo Push API
+  - 로그인 시 `registerPushToken()` 자동 호출 → `user_push_tokens` 테이블 upsert
+- **알림 탭 이동 (killed 상태)**: `App.tsx` → `setPendingNotifType` + rAF 재귀 → `consumePendingNotifType`
+  - AppNavigator도 auth 완료 후 시도 — 먼저 소비하는 쪽이 이동, 나머지는 무시
 - **Android 알람**: 반복 알람은 다음 발생 1건만 예약, 탭 시 재등록
-- **알림 탭 이동 (killed 상태)**: `App.tsx` `getLastNotificationResponseAsync` → `setPendingNotifType` 저장 + rAF 재귀로 nav 준비 시 `consumePendingNotifType` 직접 이동 (race condition 방어)
-  - `AppNavigator`도 auth 완료 후 `consumePendingNotifType`을 시도 — 먼저 소비하는 쪽이 이동, 나머지는 `undefined`라 무시
-  - **주의**: `setPendingNotifType` 없으면 타입 저장 안 됨 / `isReady()` 직접 호출하면 Tab.Navigator mount 전이라 무시됨
 
 ### 테스트
 - `npm test` — Jest 단위 테스트 (59개, `jest-expo` 프리셋)
-- 테스트 파일: `__tests__/achievementCalc.test.ts`, `streakCalc.test.ts`, `repeatDate.test.ts`, `database.test.ts`
-- 수동 회귀 체크리스트: `docs/test-checklist.md`
-- 계산 로직 변경 시 → `npm test` 먼저 실행 후 체크리스트 관련 항목 수동 확인
+- 계산 로직 변경 시 → `npm test` 먼저 실행 후 `docs/test-checklist.md` 수동 확인
 
 ### DB 컬럼명 주의
 - routines 테이블의 주 N회 컬럼: **`weekly_count`** (snake_case) — JS 객체에서는 `weeklyCount`
 - SQL 쿼리에서 반드시 `weekly_count` 사용, camelCase 혼용 시 SQLite 에러 발생
+
+### 라이브러리 버전 고정 주의
+- `react-native-reanimated`: **`4.1.1`** / `react-native-worklets`: **`0.5.1`** (Expo Go SDK 54 내장 버전)
+- 버전 올리면 `installTurboModule` 인수 불일치로 Expo Go 즉시 크래시
+- 업그레이드 시 `node_modules/expo/bundledNativeModules.json`에서 내장 버전 먼저 확인
 
 ---
 
