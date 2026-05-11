@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { registerPushToken } from '../utils/pushTokenManager';
 
 interface AuthState {
   session: Session | null;
@@ -24,6 +25,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     const { data } = await supabase.auth.getSession();
     set({ session: data.session, loading: false });
 
+    // 이미 로그인된 상태로 앱 재시작 시 푸시 토큰 갱신 (재설치·토큰 교체 대비)
+    if (data.session?.user?.id) {
+      registerPushToken(data.session.user.id).catch(() => {});
+    }
+
     // 세션 변경 시 자동 갱신 (토큰 만료 등)
     supabase.auth.onAuthStateChange((_event, session) => {
       set({ session });
@@ -31,8 +37,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   signIn: async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return error.message;
+    if (data.session?.user?.id) {
+      registerPushToken(data.session.user.id).catch(() => {});
+    }
     return null;
   },
 

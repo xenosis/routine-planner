@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, useTheme } from 'react-native-paper';
-import { View } from 'react-native';
+import { AppState, NativeModules, Platform, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 
@@ -18,6 +18,7 @@ import { getRepeatSchedulesWithAlarm } from '../db/scheduleDb';
 import { scheduleNextRepeatAlarm } from '../utils/scheduleAlarms';
 import { initDatabase } from '../db/database';
 import { useCategoryStore } from '../store/categoryStore';
+import { useScheduleStore } from '../store/scheduleStore';
 
 export type RootTabParamList = {
   Schedule: undefined;
@@ -75,6 +76,8 @@ export default function AppNavigator(): React.JSX.Element {
   const { session, loading, initialize } = useAuthStore();
   const [dbReady, setDbReady] = React.useState(false);
   const fetchAllCategories = useCategoryStore((s) => s.fetchAllCategories);
+  const syncWidgetNow = useScheduleStore((s) => s.syncWidgetNow);
+  const setScheduleDate = useScheduleStore((s) => s.setSelectedDate);
 
   useEffect(() => {
     initialize();
@@ -89,32 +92,72 @@ export default function AppNavigator(): React.JSX.Element {
           reRegisterMissingRepeatAlarms();
           // DB 초기화 완료 후 카테고리 데이터 전체 로드
           fetchAllCategories().catch(() => {});
+          // 위젯 초기 동기화: 앱 시작 시 현재 월 일정을 위젯 파일에 캐시
+          syncWidgetNow().catch(() => {});
         })
         .catch(() => {
           // DB 초기화 실패 시에도 앱은 계속 진행 (data fetch에서 개별 에러 처리)
           setDbReady(true);
         });
     }
-  }, [loading, session]);
+  }, [loading, session, fetchAllCategories, syncWidgetNow]);
 
-  // 앱 killed 상태에서 알림으로 진입한 경우: auth 로딩 완료 후 탭 이동
+  // 앱 killed 상태에서 알림 또는 위젯으로 진입한 경우: auth/DB 완료 후 탭 이동
   // loading 완료 시점에 Tab.Navigator가 아직 mount 중일 수 있으므로
   // navigationRef.isReady()가 true가 될 때까지 rAF로 대기
   useEffect(() => {
     if (!loading && dbReady) {
-      const type = consumePendingNotifType();
-      if (type) {
+      const notifType = consumePendingNotifType();
+      if (notifType) {
         const tryNavigate = () => {
           if (navigationRef.isReady()) {
-            navigateToTab(type);
+            navigateToTab(notifType);
           } else {
             requestAnimationFrame(tryNavigate);
           }
         };
         requestAnimationFrame(tryNavigate);
+      } else if (Platform.OS === 'android') {
+        // 위젯 이벤트 탭으로 앱 실행된 경우: Intent에서 날짜 읽어 일정 탭으로 이동
+        const widgetModule = (NativeModules as { WidgetModule?: { getLaunchDate: () => Promise<string | null> } }).WidgetModule;
+        if (widgetModule) {
+          widgetModule.getLaunchDate().then((date) => {
+            if (!date) return;
+            setScheduleDate(date);
+            const tryNavigate = () => {
+              if (navigationRef.isReady()) {
+                navigationRef.navigate('Schedule');
+              } else {
+                requestAnimationFrame(tryNavigate);
+              }
+            };
+            requestAnimationFrame(tryNavigate);
+          }).catch(() => {});
+        }
       }
     }
-  }, [loading, dbReady]);
+  }, [loading, dbReady, setScheduleDate]);
+
+  // 백그라운드 → 포그라운드 복귀 시 위젯 탭 날짜 처리
+  // MainActivity.onNewIntent → setIntent(intent) 덕분에 activity.intent가 새 Intent로 갱신됨
+  useEffect(() => {
+    if (!dbReady || !session || Platform.OS !== 'android') return;
+    const widgetModule = (NativeModules as { WidgetModule?: { getLaunchDate: () => Promise<string | null> } }).WidgetModule;
+    if (!widgetModule) return;
+
+    const handleAppStateChange = (nextState: string) => {
+      if (nextState === 'active') {
+        widgetModule.getLaunchDate().then((date) => {
+          if (!date) return;
+          setScheduleDate(date);
+          if (navigationRef.isReady()) navigationRef.navigate('Schedule');
+        }).catch(() => {});
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
+  }, [dbReady, session, setScheduleDate]);
 
   if (loading || (session !== null && !dbReady)) {
     return (

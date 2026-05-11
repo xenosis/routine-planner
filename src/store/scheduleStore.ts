@@ -13,6 +13,7 @@ import {
 } from '../db/scheduleDb';
 import { cancelRepeatAlarms } from '../utils/scheduleAlarms';
 import { toLocalDateStr } from '../utils/date';
+import { syncWidgetData, syncWidgetSelectedDate } from '../utils/widgetSync';
 
 export type { Schedule } from '../db/scheduleDb';
 import type { Schedule } from '../db/scheduleDb';
@@ -76,6 +77,9 @@ interface ScheduleState {
   /** 일정을 삭제하고 현재 뷰를 갱신한다. */
   deleteSchedule: (id: string) => Promise<void>;
 
+  /** 현재 월 일정을 Supabase에서 가져와 위젯 파일에 동기화한다. */
+  syncWidgetNow: () => Promise<void>;
+
   /** Supabase 실시간 구독을 시작한다. 반환된 채널로 구독 해제 가능. */
   setupRealtimeSubscription: () => RealtimeChannel;
 }
@@ -101,6 +105,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const { year, month } = parseYearMonth(date);
     set({ selectedDate: date, viewYear: year, viewMonth: month });
     get().fetchByDate(date);
+    syncWidgetSelectedDate(date);
   },
 
   clearSelectedDate: async () => {
@@ -113,6 +118,8 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
   fetchByDate: async (date: string) => {
     const schedules = await getSchedulesByDate(date);
+    // 로딩 중 selectedDate가 바뀐 경우(위젯 날짜 설정, 빠른 날짜 전환 등) stale 결과 무시
+    if (get().selectedDate !== date) return;
     set({ schedules });
   },
 
@@ -121,6 +128,7 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     // UI에서 오늘 이후 첫 일정으로 자동 스크롤하므로 DB 단에서는 필터링하지 않는다.
     const schedules = await getSchedulesByMonth(year, month);
     set({ schedules, viewYear: year, viewMonth: month });
+    syncWidgetData(year, month, schedules);
   },
 
   fetchMarkedDates: async (year: number, month: number) => {
@@ -150,6 +158,22 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
     const { year, month } = parseYearMonth(schedule.date);
     await get().fetchMarkedDates(year, month);
+
+    // 위젯 동기화: fetchByDate 경로에선 syncWidgetData가 호출되지 않으므로 별도 처리
+    const { year: wYear, month: wMonth } = parseYearMonth(schedule.date);
+    getSchedulesByMonth(wYear, wMonth)
+      .then((s) => syncWidgetData(wYear, wMonth, s))
+      .catch(() => {});
+
+    // 다른 사용자에게 푸시 알림 전송
+    supabase.auth.getSession().then(({ data }) => {
+      const userId = data.session?.user?.id;
+      const displayName = data.session?.user?.user_metadata?.display_name as string | undefined;
+      if (!userId) return;
+      supabase.functions.invoke('notify-schedule', {
+        body: { schedule, sender_id: userId, sender_name: displayName, action: 'add' },
+      }).catch(() => {});
+    });
   },
 
   // ── 수정 ───────────────────────────────
@@ -176,6 +200,22 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
 
     const { year, month } = parseYearMonth(schedule.date);
     await get().fetchMarkedDates(year, month);
+
+    // 위젯 동기화
+    const { year: wYear, month: wMonth } = parseYearMonth(schedule.date);
+    getSchedulesByMonth(wYear, wMonth)
+      .then((s) => syncWidgetData(wYear, wMonth, s))
+      .catch(() => {});
+
+    // 다른 사용자에게 푸시 알림 전송
+    supabase.auth.getSession().then(({ data }) => {
+      const userId = data.session?.user?.id;
+      const displayName = data.session?.user?.user_metadata?.display_name as string | undefined;
+      if (!userId) return;
+      supabase.functions.invoke('notify-schedule', {
+        body: { schedule, sender_id: userId, sender_name: displayName, action: 'update' },
+      }).catch(() => {});
+    });
   },
 
   // ── 삭제 ───────────────────────────────
@@ -205,6 +245,35 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
     const dateToRefresh = target?.date ?? selectedDate ?? `${viewYear}-${String(viewMonth).padStart(2, '0')}-01`;
     const { year, month } = parseYearMonth(dateToRefresh);
     await get().fetchMarkedDates(year, month);
+
+    // 위젯 동기화
+    getSchedulesByMonth(year, month)
+      .then((s) => syncWidgetData(year, month, s))
+      .catch(() => {});
+
+    // 다른 사용자에게 푸시 알림 전송 (삭제 전 캡처한 target 사용)
+    if (target) {
+      supabase.auth.getSession().then(({ data }) => {
+        const userId = data.session?.user?.id;
+        const displayName = data.session?.user?.user_metadata?.display_name as string | undefined;
+        if (!userId) return;
+        supabase.functions.invoke('notify-schedule', {
+          body: { schedule: target, sender_id: userId, sender_name: displayName, action: 'delete' },
+        }).catch(() => {});
+      });
+    }
+  },
+
+  // ── 위젯 동기화 ─────────────────────────────
+
+  syncWidgetNow: async () => {
+    try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth() + 1;
+      const schedules = await getSchedulesByMonth(year, month);
+      syncWidgetData(year, month, schedules);
+    } catch (_) {}
   },
 
   // ── 실시간 구독 ──────────────────────────────
