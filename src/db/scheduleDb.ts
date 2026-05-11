@@ -22,7 +22,7 @@ export interface Schedule {
   location?: string;
   nameTag?: string;
   nameTagColor?: string;
-  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly' | string;  // 반복 유형 (테스트: 'minutes:N')
+  repeat?: 'daily' | 'weekly' | 'monthly' | 'yearly';
   repeatUntil?: string;  // YYYY-MM-DD (반복 종료일, 없으면 무한)
 }
 

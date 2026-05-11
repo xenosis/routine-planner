@@ -96,47 +96,6 @@ export async function scheduleNextRepeatAlarm(schedule: Schedule): Promise<void>
   try {
   await cancelRepeatAlarms(schedule.id, schedule.alarmTimes.length);
 
-  // 테스트용 분 단위 반복: 다음 발생 시각을 직접 계산
-  if (schedule.repeat.startsWith('minutes:')) {
-    const intervalMins = parseInt(schedule.repeat.split(':')[1], 10);
-    if (!intervalMins || intervalMins <= 0) return;
-
-    const now = new Date();
-    const [startH, startM] = schedule.startTime.split(':').map(Number);
-    const startBase = new Date(schedule.date + 'T00:00:00');
-    startBase.setHours(startH, startM, 0, 0);
-
-    let triggerDate: Date;
-    if (startBase > now) {
-      triggerDate = startBase;
-    } else {
-      const intervalMs = intervalMins * 60 * 1000;
-      const elapsed = now.getTime() - startBase.getTime();
-      triggerDate = new Date(startBase.getTime() + Math.ceil(elapsed / intervalMs) * intervalMs);
-    }
-
-    const repeatUntilDate = schedule.repeatUntil
-      ? new Date(schedule.repeatUntil + 'T23:59:59')
-      : null;
-    if (repeatUntilDate && triggerDate > repeatUntilDate) return;
-
-    await Notifications.scheduleNotificationAsync({
-      identifier: `${schedule.id}_repeat_0`,
-      content: {
-        title: schedule.title,
-        body: `${intervalMins}분마다 반복 알람`,
-        data: { type: 'schedule' },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: triggerDate,
-        channelId: 'default',
-      },
-    });
-    return;
-  }
-
-  // 날짜 기반 반복 (daily/weekly/monthly/yearly)
   const nextDate = getNextRepeatOccurrence(schedule);
   if (!nextDate) return;
 

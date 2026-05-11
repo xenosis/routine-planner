@@ -124,13 +124,6 @@ export default function AddScheduleScreen({
   const [repeat, setRepeat] = useState<Schedule['repeat']>(() => schedule?.repeat);
   const [repeatUntil, setRepeatUntil] = useState(() => schedule?.repeatUntil ?? '');
   const [showRepeatUntilPicker, setShowRepeatUntilPicker] = useState(false);
-  // 테스트용 분 단위 반복
-  const [isMinutesModeActive, setIsMinutesModeActive] = useState(
-    () => !!schedule?.repeat?.startsWith('minutes:'),
-  );
-  const [minutesInput, setMinutesInput] = useState(() =>
-    schedule?.repeat?.startsWith('minutes:') ? schedule.repeat.split(':')[1] : '',
-  );
   // 반복 알람 시각 (반복 일정의 실제 알람 트리거 시각, 비반복의 startTime과 독립)
   const [repeatAlarmTime, setRepeatAlarmTime] = useState(() =>
     schedule?.repeat ? (schedule.startTime ?? '') : '',
@@ -211,15 +204,17 @@ export default function AddScheduleScreen({
   }, []);
 
   // 저장 처리
+  const isMultiDay = endDate !== date;
   const isTimeValid =
     repeatEnabled ||
+    isMultiDay ||
     (!startTime && !endTime) || (!!startTime && !!endTime && endTime >= startTime);
   const isDateValid = endDate >= date;
   const canSetAlarm = !!startTime && !!endTime;
 
   const handleSave = useCallback(async () => {
     if (!title.trim()) return;
-    if (!repeatEnabled && startTime && endTime && endTime < startTime) return;
+    if (!repeatEnabled && !isMultiDay && startTime && endTime && endTime < startTime) return;
     if (endDate < date) return;
 
     // 반복 일정: 알람 시각(repeatAlarmTime)을 startTime으로 사용, alarmTimes=[0]으로 고정
@@ -262,7 +257,7 @@ export default function AddScheduleScreen({
   }, [
     title, date, endDate, startTime, endTime, category,
     location, nameTag, nameTagColor, memo, alarmEnabled, alarmTimes,
-    repeat, repeatUntil, repeatEnabled, repeatAlarmTime, isMinutesModeActive, schedule, onSave,
+    repeat, repeatUntil, repeatEnabled, repeatAlarmTime, schedule, onSave,
   ]);
 
   const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid;
@@ -362,8 +357,6 @@ export default function AddScheduleScreen({
                     setRepeatEnabled(false);
                     setRepeat(undefined);
                     setRepeatUntil('');
-                    setMinutesInput('');
-                    setIsMinutesModeActive(false);
                     setRepeatAlarmTime('');
                   } else {
                     if (!startTime) setStartTime('09:00');
@@ -501,8 +494,6 @@ export default function AddScheduleScreen({
                       setRepeatEnabled(false);
                       setRepeat(undefined);
                       setRepeatUntil('');
-                      setMinutesInput('');
-                      setIsMinutesModeActive(false);
                       setRepeatAlarmTime('');
                     } else {
                       // 다일→단일: 시각 복구
@@ -579,9 +570,7 @@ export default function AddScheduleScreen({
                   <Text style={[styles.alarmLabel, { color: theme.colors.onSurface }]}>반복</Text>
                   <Text style={[styles.alarmSub, { color: theme.colors.onSurfaceVariant }]}>
                     {repeatEnabled && repeat
-                      ? isMinutesModeActive
-                        ? `${minutesInput}분마다 반복`
-                        : `${REPEAT_OPTIONS.find((o) => o.value === repeat)?.label} 반복`
+                      ? `${REPEAT_OPTIONS.find((o) => o.value === repeat)?.label} 반복`
                       : '반복 일정 설정'}
                   </Text>
                 </View>
@@ -592,8 +581,6 @@ export default function AddScheduleScreen({
                     if (!val) {
                       setRepeat(undefined);
                       setRepeatUntil('');
-                      setMinutesInput('');
-                      setIsMinutesModeActive(false);
                       setRepeatAlarmTime('');
                       setShowRepeatUntilPicker(false);
                     }
@@ -613,8 +600,6 @@ export default function AddScheduleScreen({
                         selected={repeat === opt.value}
                         onPress={() => {
                           setRepeat((prev) => prev === opt.value ? undefined : opt.value);
-                          setIsMinutesModeActive(false);
-                          setMinutesInput('');
                         }}
                         compact
                         style={styles.repeatChip}
@@ -622,61 +607,20 @@ export default function AddScheduleScreen({
                         {opt.label}
                       </Chip>
                     ))}
-                    {/* 테스트용: 분 단위 반복 */}
-                    <Chip
-                      mode={isMinutesModeActive ? 'flat' : 'outlined'}
-                      selected={isMinutesModeActive}
-                      onPress={() => {
-                        if (isMinutesModeActive) {
-                          // 분 모드 해제
-                          setIsMinutesModeActive(false);
-                          setRepeat(undefined);
-                          setMinutesInput('');
-                        } else {
-                          // 분 모드 진입 (다른 반복 선택 해제)
-                          setIsMinutesModeActive(true);
-                          setRepeat(undefined);
-                          setMinutesInput('');
-                        }
-                      }}
-                      compact
-                      style={styles.repeatChip}
-                    >
-                      N분마다
-                    </Chip>
                   </View>
 
-                  {/* 분 단위 입력 (N분마다 선택 시) */}
-                  {isMinutesModeActive && (
-                    <TextInput
-                      label="반복 간격 (분)"
-                      value={labelsReady ? minutesInput : ''}
-                      onChangeText={(v) => {
-                        setMinutesInput(v);
-                        const num = parseInt(v, 10);
-                        if (num > 0) setRepeat(`minutes:${num}`);
-                        else setRepeat(undefined);
-                      }}
-                      mode="outlined"
-                      keyboardType="numeric"
-                      style={styles.repeatUntilInput}
-                      placeholder="예: 5"
-                      maxLength={4}
-                    />
-                  )}
-
                   {/* 알람 시각 + 반복 종료일 — 한 줄 2분할 */}
-                  {(repeat || isMinutesModeActive) && (
+                  {repeat && (
                     <View>
                       <View style={styles.repeatTimeRow}>
                         <TimeInput
-                          label={isMinutesModeActive ? '기준 시각' : '알람 시각'}
+                          label="알람 시각"
                           value={repeatAlarmTime}
                           onChange={setRepeatAlarmTime}
                           compact
                           style={styles.repeatHalfInput}
                         />
-                        {repeat && !isMinutesModeActive && (
+                        {repeat && (
                           <TextInput
                             label="종료일 (선택)"
                             value={labelsReady ? repeatUntil : ''}
