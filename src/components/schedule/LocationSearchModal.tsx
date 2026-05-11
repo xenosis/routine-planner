@@ -8,6 +8,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { IconButton, Text, TextInput, useTheme } from 'react-native-paper';
@@ -44,13 +45,13 @@ function buildKakaoMapHtml(jsKey: string): string {
   <meta name="color-scheme" content="light">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; color-scheme: light; background: #fff; }
-    #map { width: 100%; height: 100%; }
+    html, body { width: 100%; height: 100%; position: relative; overflow: hidden; color-scheme: light; background: #fff; }
+    #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
     #err { display: none; position: absolute; inset: 0; background: #f5f5f5;
            flex-direction: column; align-items: center; justify-content: center;
            padding: 24px; gap: 8px; }
     #err.show { display: flex; }
-    #err p { color: #555; font-size: 13px; text-align: center; line-height: 1.5; word-break: break-all; }
+    #err p { color: #333; font-size: 13px; text-align: center; line-height: 1.6; word-break: break-all; }
   </style>
   <script type="text/javascript"
     src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${jsKey}&autoload=false"
@@ -73,17 +74,31 @@ function buildKakaoMapHtml(jsKey: string): string {
       notify('JS_ERROR', msg);
     }
     window.onerror = function(msg, src, line) {
-      showErr(msg + ' (' + (src || '') + ':' + (line || '') + ')');
+      showErr('JS 오류: ' + msg + ' (' + (src||'') + ':' + (line||'') + ')');
       return true;
     };
 
     if (typeof kakao === 'undefined') {
-      showErr('kakao 객체 없음 — SDK 로드 실패');
+      showErr('kakao 객체 없음 — SDK 스크립트 로드 실패\\n(네트워크 또는 JS 키 오류)');
     } else {
+
+      // 8초 내 콜백 미호출 시 → Kakao 플랫폼 인증 실패로 간주
+      var loadTimer = setTimeout(function() {
+        showErr('kakao.maps.load 응답 없음 (8초 초과)\\n\\n→ Kakao 개발자 콘솔에서\\n[내 앱 > 플랫폼 > Web]에\\nlocalhost 도메인을 등록해야 합니다');
+      }, 8000);
+
       try {
         kakao.maps.load(function() {
+          clearTimeout(loadTimer);
           try {
-            var map = new kakao.maps.Map(document.getElementById('map'), {
+            var mapDiv2 = document.getElementById('map');
+            var w2 = mapDiv2 ? mapDiv2.offsetWidth : 0;
+            var h2 = mapDiv2 ? mapDiv2.offsetHeight : 0;
+            if (h2 === 0) {
+              showErr('지도 컨테이너 높이 0\\n(layout: ' + w2 + 'x' + h2 + ')\\n\\n→ 레이아웃 버그 — 개발자에게 문의');
+              return;
+            }
+            var map = new kakao.maps.Map(mapDiv2, {
               center: new kakao.maps.LatLng(37.5665, 126.9780),
               level: 6
             });
@@ -124,12 +139,14 @@ function buildKakaoMapHtml(jsKey: string): string {
             });
 
             notify('MAP_READY', 'ok');
+            setTimeout(function() { try { map.relayout(); } catch(e2) {} }, 500);
           } catch(e) {
             showErr('지도 초기화 오류: ' + e.message);
           }
         });
       } catch(e) {
-        showErr('kakao.maps.load 오류: ' + e.message);
+        clearTimeout(loadTimer);
+        showErr('kakao.maps.load 호출 오류: ' + e.message);
       }
     }
   </script>
@@ -161,7 +178,10 @@ export default function LocationSearchModal({
 }: LocationSearchModalProps): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const webViewRef = useRef<WebView>(null);
+  // edgeToEdge + 중첩 Modal에서 flex: 1이 높이 0으로 계산되는 버그 방지
+  const mapHeight = Math.max(windowHeight - insets.top - 50 - 72 - 260 - 24, 150);
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<KakaoPlace[]>([]);
@@ -322,7 +342,7 @@ export default function LocationSearchModal({
         </View>
 
         {/* 카카오 지도 */}
-        <View style={styles.mapContainer}>
+        <View style={[styles.mapContainer, { height: mapHeight }]}>
           <WebView
             ref={webViewRef}
             source={{ html: MAP_HTML, baseUrl: 'http://localhost' }}
@@ -417,7 +437,7 @@ export default function LocationSearchModal({
               styles.confirmBar,
               {
                 backgroundColor: theme.colors.primaryContainer,
-                paddingBottom: insets.bottom > 0 ? insets.bottom : spacing.sm,
+                bottom: insets.bottom,
               },
             ]}
             onPress={handleConfirm}
@@ -460,7 +480,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   mapContainer: {
-    flex: 1,
     overflow: 'hidden',
   },
   map: {
