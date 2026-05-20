@@ -171,6 +171,24 @@ async function _initDatabase(): Promise<void> {
       }
     }
   }
+  // 공통 카테고리 색상·순서 통일 마이그레이션: 이미 있는 카테고리도 기준값으로 업데이트
+  const unifiedCategories = [
+    { name: '업무', color: '#6366F1', sortOrder: 0 },
+    { name: '개인', color: '#10B981', sortOrder: 1 },
+    { name: '건강', color: '#F59E0B', sortOrder: 2 },
+    { name: '학습', color: '#3B82F6', sortOrder: 3 },
+    { name: '가족', color: '#EC4899', sortOrder: 4 },
+    { name: '기타', color: '#94A3B8', sortOrder: 5 },
+  ];
+  for (const type of ['schedule', 'routine', 'todo']) {
+    for (const cat of unifiedCategories) {
+      await db.runAsync(
+        'UPDATE categories SET color = ?, sortOrder = ? WHERE type = ? AND name = ?',
+        [cat.color, cat.sortOrder, type, cat.name],
+      );
+    }
+  }
+
   // 루틴 탭 구 카테고리(운동/공부/청소/관리) 삭제 — 연관 루틴은 기타로 변경
   const routineDefault = await db.getFirstAsync<{ color: string }>(
     "SELECT color FROM categories WHERE type = 'routine' AND isDefault = 1",

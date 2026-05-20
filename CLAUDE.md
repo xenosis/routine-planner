@@ -49,7 +49,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-20, v1.2.1)
+## 현재 구현 상태 (2026-05-20, v1.2.2)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -66,8 +66,10 @@
 - **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립 관리, 삭제·변경 시 '기타'로 마이그레이션
   - `database.ts` 시드: **세 탭 공통 6개** — 업무(#6366F1) / 개인(#10B981) / 건강(#F59E0B) / 학습(#3B82F6) / 가족(#EC4899) / 기타(#94A3B8, 기본값)
   - DB 마이그레이션: 앱 업데이트 시 누락 카테고리 자동 추가 + 루틴 탭 구 카테고리(운동/공부/청소/관리) 삭제 → 연관 루틴 기타로 변경
+  - **색상·순서 통일 마이그레이션**: 기존 공통 6개 카테고리를 표준 색상·sortOrder로 강제 UPDATE (INSERT 뿐 아니라 기존 레코드도 수정)
   - DB 초기화 race condition 방지: `initPromise` 캐시로 시드 중복 삽입 방지
   - **드래그앤드롭 순서 변경**: `react-native-draggable-flatlist` — `reorderCategories` 낙관적 업데이트 후 `setCategoryOrder` DB 일괄 저장
+  - **탭 간 동기화**: `syncCategoryToOtherTabs` — 카테고리 이름·색상 수정 시 동일 이름의 다른 탭 레코드에도 적용 / `syncCategoryOrderToOtherTabs` — 순서 변경 시 공통 카테고리 순서를 나머지 탭에도 동기화 (탭 전용 카테고리는 뒤에 배치)
   - `App.tsx`에 `GestureHandlerRootView` 필수 (`index.ts`에 `react-native-gesture-handler` import 선행)
 - **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 (`dbReady` 게이트)
   - DB 완료 후 카테고리 전체 로드 (`fetchAllCategories`) + 위젯 즉시 동기화 (`syncWidgetNow`)
@@ -75,10 +77,16 @@
 - **Android 홈 화면 위젯**: Medium(4×3) / Large(4×5) 월간 달력, Kotlin AppWidgetProvider
   - 위젯 4종: 불투명(Medium/Large) + 투명(Medium/Large) — `CalendarWidgetProvider`의 `abstract getLayoutId()`로 분기
   - 투명 버전: `widget_calendar_transparent.xml` (배경 없음, 텍스트 드롭 섀도우 적용)
+    - `events_list` ListView에 `android:background="@android:color/transparent"` + `android:cacheColorHint="@android:color/transparent"` 필수 — 누락 시 날짜 클릭 후 불투명 배경 나타나는 버그
   - 요일 헤더: 날짜 숫자와 동일한 18sp, 날짜 셀 28dp × 28dp (컴팩트)
+  - **여러날 일정 바 표시**: `day_dot` (기존 4dp×4dp 원형 점) → `match_parent × 4dp` 가로 바로 변경
+    - `WidgetDataCache.getEventBarInfoByDay()`: 날짜별 `EventBarInfo`(색상, isMultiDay, isStart, isEnd) 반환
+    - drawable 4종: `widget_event_bar_single/start/middle/end.xml` — 여러날 시작·중간·끝·단일 이벤트 모양 구분
+  - **이벤트 섹션 고정 높이**: `tv_no_events` + `events_list`를 `FrameLayout(@+id/events_section, 70dp)`으로 감쌈 — 일정 없는 날 `setEmptyView`가 ListView를 GONE 처리해도 달력 크기 불변
+  - 이벤트 행 높이 32dp, 제목 22sp / 시간 20sp — API 31+ 동적 스케일링 기준값 70dp로 변경
   - 이벤트 탭 PendingIntent template은 반드시 **`FLAG_MUTABLE`** (FLAG_IMMUTABLE 시 fillIn extras 병합 안 됨)
   - 위젯 탭 → 앱 복귀: `MainActivity.onNewIntent → setIntent(intent)` + JS `AppState` 리스너 → `getLaunchDate()`
-  - **RemoteViews 제약**: `<View>` 사용 불가 — `<TextView>`, `<ImageView>` 등 허용 클래스만
+  - **RemoteViews 제약**: `<View>` 사용 불가 — `<TextView>`, `<ImageView>`, `<FrameLayout>` 등 허용 클래스만 사용 가능
   - **Expo Go / 디버그 빌드에서 동작 안 함** — 릴리즈 APK에서만 테스트 가능
 - **크로스 유저 푸시 알림**: `addSchedule()` → Edge Function `notify-schedule` → Expo Push API
   - 로그인 시 `registerPushToken()` 자동 호출 → `user_push_tokens` 테이블 upsert

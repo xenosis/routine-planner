@@ -189,3 +189,61 @@ export async function setCategoryOrder(items: Array<{ id: string; sortOrder: num
     await db.runAsync('UPDATE categories SET sortOrder = ? WHERE id = ?', [item.sortOrder, item.id]);
   }
 }
+
+/**
+ * 카테고리 이름·색상 변경을 같은 이름의 다른 탭 카테고리에도 동기화한다.
+ * 이름이 바뀐 경우 다른 탭의 같은 oldName 항목도 newName/color로 업데이트.
+ */
+export async function syncCategoryToOtherTabs(
+  oldName: string,
+  newName: string,
+  newColor: string,
+  sourceType: Category['type'],
+): Promise<void> {
+  const db = await getDb();
+  const otherTypes = (['schedule', 'routine', 'todo'] as Category['type'][]).filter(
+    (t) => t !== sourceType,
+  );
+  for (const type of otherTypes) {
+    await db.runAsync(
+      'UPDATE categories SET name = ?, color = ? WHERE type = ? AND name = ?',
+      [newName, newColor, type, oldName],
+    );
+  }
+}
+
+/**
+ * 한 탭의 카테고리 순서(이름 배열)를 다른 탭에도 동기화한다.
+ * 공통 카테고리는 동일 순서로, 탭 전용 카테고리는 공통 카테고리 뒤에 배치한다.
+ */
+export async function syncCategoryOrderToOtherTabs(
+  sourceType: Category['type'],
+  orderedNames: string[],
+): Promise<void> {
+  const db = await getDb();
+  const otherTypes = (['schedule', 'routine', 'todo'] as Category['type'][]).filter(
+    (t) => t !== sourceType,
+  );
+  for (const type of otherTypes) {
+    const existing = await db.getAllAsync<CategoryRow>(
+      'SELECT * FROM categories WHERE type = ? ORDER BY sortOrder ASC',
+      [type],
+    );
+    const updates: Array<{ id: string; sortOrder: number }> = [];
+    // 공통 카테고리: orderedNames 순서로 정렬
+    let order = 0;
+    for (const name of orderedNames) {
+      const cat = existing.find((c) => c.name === name);
+      if (cat) updates.push({ id: cat.id, sortOrder: order++ });
+    }
+    // 탭 전용 카테고리: 공통 카테고리 뒤에 배치
+    for (const cat of existing) {
+      if (!orderedNames.includes(cat.name)) {
+        updates.push({ id: cat.id, sortOrder: order++ });
+      }
+    }
+    for (const u of updates) {
+      await db.runAsync('UPDATE categories SET sortOrder = ? WHERE id = ?', [u.sortOrder, u.id]);
+    }
+  }
+}

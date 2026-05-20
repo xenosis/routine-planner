@@ -7,6 +7,8 @@ import {
   deleteCategory,
   swapCategoryOrder,
   setCategoryOrder,
+  syncCategoryToOtherTabs,
+  syncCategoryOrderToOtherTabs,
 } from '../db/categoryDb';
 
 // ─────────────────────────────────────────────
@@ -80,14 +82,14 @@ export const useCategoryStore = create<CategoryState>((set) => ({
 
   editCategory: async (id, name, color, oldName, type) => {
     await updateCategory(id, name, color, oldName, type);
-    const categories = await getCategories(type);
-    if (type === 'schedule') {
-      set({ scheduleCategories: categories });
-    } else if (type === 'routine') {
-      set({ routineCategories: categories });
-    } else {
-      set({ todoCategories: categories });
-    }
+    // 같은 이름의 카테고리를 다른 탭에도 동기화
+    await syncCategoryToOtherTabs(oldName, name, color, type);
+    const [schedule, routine, todo] = await Promise.all([
+      getCategories('schedule'),
+      getCategories('routine'),
+      getCategories('todo'),
+    ]);
+    set({ scheduleCategories: schedule, routineCategories: routine, todoCategories: todo });
   },
 
   removeCategory: async (id, name, type) => {
@@ -128,5 +130,15 @@ export const useCategoryStore = create<CategoryState>((set) => ({
     // DB에 순서 일괄 저장
     const updates = newOrder.map((cat, idx) => ({ id: cat.id, sortOrder: idx }));
     await setCategoryOrder(updates);
+
+    // 같은 순서를 다른 탭에도 동기화
+    const orderedNames = newOrder.map((cat) => cat.name);
+    await syncCategoryOrderToOtherTabs(type, orderedNames);
+    const [schedule, routine, todo] = await Promise.all([
+      getCategories('schedule'),
+      getCategories('routine'),
+      getCategories('todo'),
+    ]);
+    set({ scheduleCategories: schedule, routineCategories: routine, todoCategories: todo });
   },
 }));
