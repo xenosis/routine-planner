@@ -13,7 +13,7 @@ import {
 } from '../db/scheduleDb';
 import { cancelRepeatAlarms } from '../utils/scheduleAlarms';
 import { toLocalDateStr } from '../utils/date';
-import { syncWidgetData, syncWidgetSelectedDate } from '../utils/widgetSync';
+import { syncWidgetData, syncWidgetDataBatch, syncWidgetSelectedDate } from '../utils/widgetSync';
 
 export type { Schedule } from '../db/scheduleDb';
 import type { Schedule } from '../db/scheduleDb';
@@ -271,8 +271,26 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       const today = new Date();
       const year = today.getFullYear();
       const month = today.getMonth() + 1;
-      const schedules = await getSchedulesByMonth(year, month);
-      syncWidgetData(year, month, schedules);
+
+      // 이전 달
+      const prevMonth = month === 1 ? 12 : month - 1;
+      const prevYear  = month === 1 ? year - 1 : year;
+      // 다음 달
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear  = month === 12 ? year + 1 : year;
+
+      const [prev, curr, next] = await Promise.all([
+        getSchedulesByMonth(prevYear, prevMonth),
+        getSchedulesByMonth(year, month),
+        getSchedulesByMonth(nextYear, nextMonth),
+      ]);
+
+      // 3개월 데이터를 단일 브릿지 호출로 일괄 전송
+      syncWidgetDataBatch([
+        { year: prevYear, month: prevMonth, schedules: prev },
+        { year, month, schedules: curr },
+        { year: nextYear, month: nextMonth, schedules: next },
+      ]);
     } catch (_) {}
   },
 

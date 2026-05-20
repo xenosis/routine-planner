@@ -128,7 +128,7 @@ export async function getMarkedDates(
   // 비반복 일정 (기존 쿼리)
   const { data: nonRepeat, error: e1 } = await supabase
     .from('schedules')
-    .select('date, participants, nameTagColor')
+    .select('date, endDate, participants, nameTagColor')
     .or('repeat.is.null,repeat.eq.none')
     .gte('date', startDate)
     .lt('date', endDate);
@@ -148,8 +148,9 @@ export async function getMarkedDates(
 
   const colorMap = new Map<string, Set<string>>();
 
-  // 비반복 일정 처리
+  // 비반복 일정 처리 — 여러날 일정(endDate > date)은 bar로 표시되므로 dot 제외
   for (const row of nonRepeat ?? []) {
+    if (row.endDate && row.endDate !== row.date) continue;
     if (!colorMap.has(row.date)) colorMap.set(row.date, new Set());
     const color = row.nameTagColor ?? (row.participants ? getNameColor(row.participants) : NAME_TAG_DEFAULT_COLOR);
     colorMap.get(row.date)!.add(color);
