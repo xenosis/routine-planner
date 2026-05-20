@@ -44,7 +44,8 @@ keystore.properties
 /android
 
 # 로컬 빌드 산출물
-doro.apk
+*.apk
+*.aab
 
 # Claude Code
 .claude/
