@@ -13,11 +13,10 @@ function formatFrequency(routine: Routine): string {
   if (routine.frequency === 'daily') return '매일';
   if (routine.frequency === 'weekly_count') return `주 ${routine.weeklyCount ?? '?'}회`;
   if (!routine.weekdays || routine.weekdays.length === 0) return '요일 선택';
-  const days = [...routine.weekdays]
+  return [...routine.weekdays]
     .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
     .map(d => DAY_LABELS[d])
     .join('');
-  return `주 ${routine.weekdays.length}회 · ${days}`;
 }
 
 // 요일 레이블 및 JS getDay() 매핑: 월(1)~토(6)~일(0) 순서
@@ -140,9 +139,19 @@ export default function RoutineItem({
             </Text>
 
             {/* 빈도 라벨 */}
-            <Text style={[styles.metaBadge, { color: theme.colors.onSurfaceVariant }]}>
-              {' · '}{formatFrequency(routine)}
-            </Text>
+            <View style={styles.freqRow}>
+              {routine.frequency !== 'daily' && (
+                <MaterialCommunityIcons
+                  name={routine.frequency === 'weekly_count' ? 'repeat' : 'calendar-week'}
+                  size={11}
+                  color={theme.colors.onSurfaceVariant}
+                  style={{ marginLeft: 4 }}
+                />
+              )}
+              <Text style={[styles.metaBadge, { color: theme.colors.onSurfaceVariant }]}>
+                {routine.frequency === 'daily' ? ' · ' : ' '}{formatFrequency(routine)}
+              </Text>
+            </View>
 
             {/* 스트릭 (1일 이상일 때만) */}
             {routine.streak > 0 && (
@@ -168,8 +177,11 @@ export default function RoutineItem({
 
           {/* 주간 완료 현황 도트 */}
           {routine.frequency === 'weekly_count' && routine.weeklyCount ? (
-            // weekly_count: 목표 횟수만큼 dot 나열, 완료 수만큼 채움 (●●○)
+            // weekly_count: 이번 주 N/M회 텍스트 + 목표 횟수만큼 dot
             <View style={styles.weekRow}>
+              <Text style={[styles.weekCountText, { color: theme.colors.onSurfaceVariant }]}>
+                {weekCompletions.length}/{routine.weeklyCount}회
+              </Text>
               {Array.from({ length: routine.weeklyCount }, (_, i) => (
                 <View key={i} style={styles.weekDotItem}>
                   <View
@@ -330,6 +342,15 @@ const styles = StyleSheet.create({
   },
   weekDotLabel: {
     fontSize: 9,
+  },
+  freqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weekCountText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginRight: 4,
   },
   deleteButton: {
     justifyContent: 'center',

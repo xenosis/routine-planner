@@ -289,12 +289,10 @@ export default function AccountScreen(): React.JSX.Element {
         {/* 헤더 */}
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: theme.colors.onBackground }]}>계정</Text>
-        </View>
-
-        {/* 앱 아이콘 + 이름 */}
-        <View style={styles.logoArea}>
-          <MaterialCommunityIcons name="refresh-circle" size={64} color={theme.colors.primary} />
-          <Text style={[styles.appName, { color: theme.colors.onBackground }]}>Doro</Text>
+          <View style={styles.appBadge}>
+            <MaterialCommunityIcons name="refresh-circle" size={22} color={theme.colors.primary} />
+            <Text style={[styles.appBadgeName, { color: theme.colors.onBackground }]}>Doro</Text>
+          </View>
         </View>
 
         {/* 이메일 카드 */}
@@ -310,7 +308,7 @@ export default function AccountScreen(): React.JSX.Element {
 
         {/* 이름표 설정 */}
         <Surface style={[styles.card, styles.nameCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
-          <Text style={[styles.cardLabel, { color: theme.colors.onSurfaceVariant, marginBottom: spacing.sm }]}>
+          <Text style={[styles.cardLabel, { color: theme.colors.onSurfaceVariant, marginBottom: spacing.xs }]}>
             작성자 (일정 카드에 표시될 이름과 색상)
           </Text>
 
@@ -511,20 +509,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingTop: spacing.base,
     paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerTitle: { fontSize: 22, fontWeight: '700' },
-  logoArea: {
+  appBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.xl,
-    gap: spacing.sm,
+    gap: 4,
   },
-  appName: { fontSize: 24, fontWeight: '700', letterSpacing: -0.5 },
+  appBadgeName: { fontSize: 14, fontWeight: '700' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: spacing.base,
-    marginBottom: spacing.sm,
-    padding: spacing.base,
+    marginBottom: spacing.xs,
+    padding: spacing.sm,
     borderRadius: borderRadius.md,
     gap: spacing.sm,
   },
@@ -540,7 +541,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   nameInput: { flex: 1 },
   previewBadge: {
@@ -580,7 +581,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginHorizontal: spacing.base,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.xs,
   },
   sectionTitle: {

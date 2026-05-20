@@ -131,61 +131,63 @@ async function _initDatabase(): Promise<void> {
   );
   if (!existingCount || existingCount.cnt === 0) {
     const now = Date.now();
-    // 일정 카테고리
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}a1`, 'schedule', '업무', '#6366F1', 0, 0],
+    const seed = [
+      { name: '업무', color: '#6366F1', isDefault: 0, sortOrder: 0 },
+      { name: '개인', color: '#10B981', isDefault: 0, sortOrder: 1 },
+      { name: '건강', color: '#F59E0B', isDefault: 0, sortOrder: 2 },
+      { name: '학습', color: '#3B82F6', isDefault: 0, sortOrder: 3 },
+      { name: '가족', color: '#EC4899', isDefault: 0, sortOrder: 4 },
+      { name: '기타', color: '#94A3B8', isDefault: 1, sortOrder: 5 },
+    ];
+    for (const type of ['schedule', 'routine', 'todo']) {
+      for (const cat of seed) {
+        await db.runAsync(
+          'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
+          [`${now.toString(36)}_${type}_${cat.sortOrder}`, type, cat.name, cat.color, cat.isDefault, cat.sortOrder],
+        );
+      }
+    }
+  }
+
+  // 카테고리 통일 마이그레이션: 모든 탭에 공통 카테고리 추가, 루틴 구 카테고리 정리
+  const commonCategories = [
+    { name: '업무', color: '#6366F1', sortOrder: 0 },
+    { name: '개인', color: '#10B981', sortOrder: 1 },
+    { name: '건강', color: '#F59E0B', sortOrder: 2 },
+    { name: '학습', color: '#3B82F6', sortOrder: 3 },
+    { name: '가족', color: '#EC4899', sortOrder: 4 },
+  ];
+  for (const type of ['schedule', 'routine', 'todo']) {
+    for (const cat of commonCategories) {
+      const exists = await db.getFirstAsync<{ cnt: number }>(
+        'SELECT COUNT(*) as cnt FROM categories WHERE type = ? AND name = ?',
+        [type, cat.name],
+      );
+      if (!exists || exists.cnt === 0) {
+        await db.runAsync(
+          'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, 0, ?)',
+          [`${Date.now().toString(36)}_${type}_${cat.name}`, type, cat.name, cat.color, cat.sortOrder],
+        );
+      }
+    }
+  }
+  // 루틴 탭 구 카테고리(운동/공부/청소/관리) 삭제 — 연관 루틴은 기타로 변경
+  const routineDefault = await db.getFirstAsync<{ color: string }>(
+    "SELECT color FROM categories WHERE type = 'routine' AND isDefault = 1",
+  );
+  const fallbackColor = routineDefault?.color ?? '#94A3B8';
+  for (const oldName of ['운동', '공부', '청소', '관리']) {
+    const old = await db.getFirstAsync<{ id: string }>(
+      'SELECT id FROM categories WHERE type = ? AND name = ? AND isDefault = 0',
+      ['routine', oldName],
     );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}a2`, 'schedule', '개인', '#10B981', 0, 1],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}a3`, 'schedule', '건강', '#F59E0B', 0, 2],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}a4`, 'schedule', '기타', '#94A3B8', 1, 3],
-    );
-    // 루틴 카테고리
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}b1`, 'routine', '운동', '#10B981', 0, 0],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}b2`, 'routine', '공부', '#6366F1', 0, 1],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}b3`, 'routine', '청소', '#06B6D4', 0, 2],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}b4`, 'routine', '관리', '#F59E0B', 0, 3],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}b5`, 'routine', '기타', '#94A3B8', 1, 4],
-    );
-    // 할일 카테고리
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}c1`, 'todo', '업무', '#6366F1', 0, 0],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}c2`, 'todo', '개인', '#10B981', 0, 1],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}c3`, 'todo', '건강', '#F59E0B', 0, 2],
-    );
-    await db.runAsync(
-      'INSERT INTO categories (id, type, name, color, isDefault, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
-      [`${now.toString(36)}c4`, 'todo', '기타', '#94A3B8', 1, 3],
-    );
+    if (old) {
+      await db.runAsync(
+        "UPDATE routines SET category = '기타', color = ? WHERE category = ?",
+        [fallbackColor, oldName],
+      );
+      await db.runAsync('DELETE FROM categories WHERE id = ?', [old.id]);
+    }
   }
 
   // alarmTimes 컬럼 마이그레이션

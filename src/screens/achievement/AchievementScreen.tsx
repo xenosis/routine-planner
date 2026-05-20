@@ -13,7 +13,6 @@ import { BarChart } from 'react-native-gifted-charts';
 import { Calendar } from 'react-native-calendars';
 
 import {
-  getDailyCompletions,
   getRoutineAchievements,
   getTotalRoutineCount,
   getTodayCompletedRoutineIds,
@@ -87,8 +86,8 @@ function useAchievementData() {
         todayCompletedIds,
         totalRoutines,
         totalCompletions,
-        weeklyCompletions,
         weeklyRoutineCompletions,
+        weeklyCompletionDetails,
         routineAchievements,
         earliestRoutineDate,
         routineSchedules,
@@ -96,8 +95,8 @@ function useAchievementData() {
         getTodayCompletedRoutineIds(today),
         getTotalRoutineCount(),
         getTotalCompletionCount(),
-        getDailyCompletions(weekStart, today),
         getWeeklyCompletionsByRoutine(weekStart, today),
+        getRoutineCompletionsInRange(weekStart, today),
         getRoutineAchievements(today),
         getEarliestRoutineCreatedAt(today),
         getRoutineScheduleInfo(),
@@ -124,20 +123,16 @@ function useAchievementData() {
       const maxStreak = maxStreakRoutine?.streak ?? 0;
       const maxStreakUnit = maxStreakRoutine?.frequency === 'weekly_count' ? '주' : '일';
 
-      // 주간 차트: 각 날짜별로 "그날 예정된 루틴 수"를 분모로 사용
-      // weekly_count 중 이번 주 quota 달성한 루틴은 분모에서 제외
-      const quotaMetForWeek = new Set(
-        routineSchedules
-          .filter((r) => r.frequency === 'weekly_count' && (weeklyDoneMap.get(r.id) ?? 0) >= (r.weeklyCount ?? 1))
-          .map((r) => r.id),
-      );
-
-      const completionMap = new Map<string, number>(
-        weeklyCompletions.map((r) => [r.date, r.completedCount]),
-      );
+      // 주간 차트: weekly_count 완전 제외 — 날짜별 루틴별 완료 데이터에서 필터링
+      const filteredCompletionMap = new Map<string, number>();
+      for (const { routineId, date } of weeklyCompletionDetails) {
+        if (!weeklyCountIds.has(routineId)) {
+          filteredCompletionMap.set(date, (filteredCompletionMap.get(date) ?? 0) + 1);
+        }
+      }
       const weeklyChartData = thisWeekDays.map((date) => {
-        const completed = completionMap.get(date) ?? 0;
-        const scheduled = getScheduledCountForDate(date, routineSchedules, quotaMetForWeek);
+        const completed = filteredCompletionMap.get(date) ?? 0;
+        const scheduled = getScheduledCountForDate(date, routineSchedules, weeklyCountIds);
         const rate = scheduled > 0 ? Math.min(Math.round((completed / scheduled) * 100), 100) : 0;
         return {
           label: getDayLabel(date),
@@ -147,20 +142,16 @@ function useAchievementData() {
         };
       });
 
-      // 주간 달성률: 루틴별로 계산 후 평균
-      // - daily / weekly_days: 이번 주 예정 일수 대비 완료 일수
-      // - weekly_count: min(완료횟수, quota) / quota
+      // 주간 달성률: daily / weekly_days만 포함, weekly_count 제외
       // - weekly_days로 이번 주 아직 예정일 없는 루틴은 평균에서 제외 (기회 없음 → 0% 왜곡 방지)
       let weeklyRate = 0;
-      const activeRoutines = routineSchedules.filter((r) => r.createdAt <= today);
+      const activeRoutines = routineSchedules.filter(
+        (r) => r.createdAt <= today && r.frequency !== 'weekly_count',
+      );
       if (activeRoutines.length > 0) {
         const rates = activeRoutines
           .map((routine) => {
             const done = weeklyDoneMap.get(routine.id) ?? 0;
-            if (routine.frequency === 'weekly_count') {
-              const quota = routine.weeklyCount ?? 1;
-              return Math.min(done / quota, 1);
-            }
             const scheduledDays = thisWeekDays.filter((d) => {
               if (d < routine.createdAt) return false;
               const [y, mo, day] = d.split('-').map(Number);
@@ -168,7 +159,6 @@ function useAchievementData() {
               if (routine.frequency === 'daily') return true;
               return routine.weekdays?.includes(weekday) ?? false;
             }).length;
-            // 이번 주 아직 예정일 없는 weekly_days → 평균 계산에서 제외
             return scheduledDays > 0 ? Math.min(done / scheduledDays, 1) : null;
           })
           .filter((r): r is number => r !== null);

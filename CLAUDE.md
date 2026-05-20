@@ -49,7 +49,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-11, v1.2.0)
+## 현재 구현 상태 (2026-05-20, v1.2.1)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -63,14 +63,15 @@
 - **일정**: Supabase 연동, 반복 일정 (`matchesRepeatDate` → `src/utils/repeatDate.ts`), 여러날/이름표/장소
 - **루틴**: daily / weekly_days / weekly_count, 스트릭 계산 (`src/utils/streakCalc.ts`)
 - **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`)
-- **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립, 삭제·변경 시 '기타'로 마이그레이션
-  - `database.ts` 시드: 일정 4 + 루틴 5 + 할일 4 = 13개 기본 카테고리
+- **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립 관리, 삭제·변경 시 '기타'로 마이그레이션
+  - `database.ts` 시드: **세 탭 공통 6개** — 업무(#6366F1) / 개인(#10B981) / 건강(#F59E0B) / 학습(#3B82F6) / 가족(#EC4899) / 기타(#94A3B8, 기본값)
+  - DB 마이그레이션: 앱 업데이트 시 누락 카테고리 자동 추가 + 루틴 탭 구 카테고리(운동/공부/청소/관리) 삭제 → 연관 루틴 기타로 변경
   - DB 초기화 race condition 방지: `initPromise` 캐시로 시드 중복 삽입 방지
   - **드래그앤드롭 순서 변경**: `react-native-draggable-flatlist` — `reorderCategories` 낙관적 업데이트 후 `setCategoryOrder` DB 일괄 저장
   - `App.tsx`에 `GestureHandlerRootView` 필수 (`index.ts`에 `react-native-gesture-handler` import 선행)
 - **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 (`dbReady` 게이트)
   - DB 완료 후 카테고리 전체 로드 (`fetchAllCategories`) + 위젯 즉시 동기화 (`syncWidgetNow`)
-- **성과탭**: `getThisWeekDays(today)` 기준 주간 달성률 / `weekly_count` 루틴은 오늘 목록·헤더·완료 카운트에서 항상 제외
+- **성과탭**: `getThisWeekDays(today)` 기준 주간 달성률 / `weekly_count` 루틴은 오늘 목록·헤더·완료 카운트·주간 달성률·주간 차트 모두에서 완전 제외 (날짜 기반 지표와 개념 충돌)
 - **Android 홈 화면 위젯**: Medium(4×3) / Large(4×5) 월간 달력, Kotlin AppWidgetProvider
   - 위젯 4종: 불투명(Medium/Large) + 투명(Medium/Large) — `CalendarWidgetProvider`의 `abstract getLayoutId()`로 분기
   - 투명 버전: `widget_calendar_transparent.xml` (배경 없음, 텍스트 드롭 섀도우 적용)

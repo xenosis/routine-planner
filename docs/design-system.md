@@ -12,8 +12,8 @@
 spacing:     xs=4, sm=8, md=12, base=16, lg=20, xl=24, xxl=32, xxxl=48
 borderRadius: sm=8, md=12, lg=16, xl=24, full=9999
 브랜드 컬러:  primary=#6366F1(인디고), secondary=#10B981(에메랄드)
-일정 카테고리 색상: 업무=#6366F1, 개인=#10B981, 건강=#F59E0B, 기타=#94A3B8
-루틴 카테고리 색상: 운동=#10B981, 공부=#6366F1, 청소=#06B6D4, 관리=#F59E0B, 기타=#94A3B8
+공통 카테고리 색상 (일정·루틴·할일 세 탭 동일):
+  업무=#6366F1, 개인=#10B981, 건강=#F59E0B, 학습=#3B82F6, 가족=#EC4899, 기타=#94A3B8
 ```
 
 ---
@@ -158,10 +158,13 @@ Paper v5 `mode="outlined"` label은 `value !== '' || focused` 일 때만 상단 
          [카테고리 · 빈도 · 🔥스트릭 · 🔔알람]
          [● ● ○ ○ ● ○ ●]  ← 주간 완료 도트
 ```
-- 빈도 라벨: `'매일'` / `'주 N회 · 월수금'` / `'주 N회'`
+- 빈도 라벨 (아이콘 + 텍스트):
+  - `daily`: 아이콘 없이 "매일"
+  - `weekly_count`: 🔁(`repeat`) 아이콘 + "주 N회"
+  - `weekly_days`: 📅(`calendar-week`) 아이콘 + "월수금" (요일만, "주 N회 ·" 미표시)
 - 주간 도트:
   - `daily`/`weekly_days`: 월~일 7개, 예정 요일만 완료(채움)/미완료(테두리), 비예정 placeholder
-  - `weekly_count`: 목표 횟수만큼 dot (예: 주3회 → `●●○`)
+  - `weekly_count`: "N/M회" 텍스트 + 목표 횟수만큼 dot (예: "2/3회 ●●○")
 - Props: `isQuotaMet` → 카드 흐려짐 + 체크 비활성, `showCheckButton={false}` → 내 루틴 관리 탭용
 
 ### TodoItem

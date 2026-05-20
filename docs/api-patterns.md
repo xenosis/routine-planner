@@ -72,23 +72,25 @@ onClose: () => void
 
 ### 성과 달성률 계산 (AchievementScreen)
 - 순수 계산 함수: `src/utils/achievementCalc.ts` (테스트: `__tests__/achievementCalc.test.ts`)
-- **오늘 완료 분모**: `getScheduledCountForDate(today, routineSchedules, quotaMetBeforeToday)`
-  - daily/weekly_count → 항상 포함
+- **오늘 완료 분모**: `getScheduledCountForDate(today, routineSchedules, weeklyCountIds)`
+  - daily → 항상 포함
+  - weekly_count → **완전 제외** (날짜 기반 지표와 개념이 다름)
   - weekly_days → 오늘 요일이 weekdays에 포함될 때만 포함
   - createdAt > today인 루틴 제외
-  - `quotaMetBeforeToday`: 오늘 체크분 제외한 횟수로 quota 달성 여부 판단 → 오늘 체크로 처음 채운 경우 "오늘 완료"로 집계
 
 #### 주간 달성률
 - `getThisWeekDays(today)`: 이번 주 월~오늘 날짜 배열 (최근 7일 X)
-- 루틴별 계산 후 평균:
-  - `daily` / `weekly_days`: 이번 주 예정 일수 대비 완료 일수
-  - `weekly_count`: `min(완료횟수, quota) / quota`
+- **weekly_count 완전 제외** — daily / weekly_days만으로 평균 계산
+  - `routineSchedules.filter(r => r.frequency !== 'weekly_count')`
+- `daily` / `weekly_days`: 이번 주 예정 일수 대비 완료 일수
 - **weekly_days 이번 주 예정일 없는 루틴**: `scheduledDays === 0` → `null` 반환 → 평균 계산 제외
   - 예) 오늘이 월요일이고 화~일 루틴이면 이번 주 아직 기회 없음 → 달성률 평균에 포함하면 왜곡
 
 #### 주간 차트
-- `quotaMetForWeek`: 이번 주 quota 달성한 weekly_count 루틴 ID 집합
-  - 각 날짜 분모(`getScheduledCountForDate`)에서 제외 → 100% 초과 방지
+- **weekly_count 완전 제외** — 분모·분자 모두에서 제외
+  - 분모: `weeklyCountIds`를 `getScheduledCountForDate` 제외 집합으로 전달
+  - 분자: `getRoutineCompletionsInRange(weekStart, today)` 결과에서 weekly_count routineId 필터링
+  - `getDailyCompletions` 미사용 → `getRoutineCompletionsInRange`로 대체
 - 막대 레이블: 완료율 0%인 날도 "0%" 표시 (값 없어도 레이블 렌더링)
 
 #### 월간 달력
