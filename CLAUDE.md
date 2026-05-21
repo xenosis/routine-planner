@@ -49,7 +49,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-20, v1.2.2)
+## 현재 구현 상태 (2026-05-21, v1.2.3)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -85,12 +85,15 @@
   - **이벤트 섹션 고정 높이**: `tv_no_events` + `events_list`를 `FrameLayout(@+id/events_section, 96dp)`으로 감쌈 — 일정 없는 날 `setEmptyView`가 ListView를 GONE 처리해도 달력 크기 불변
     - 행 32dp × 최대 3줄 = 96dp 고정 (위젯 크기와 무관하게 최대 96dp로 cap)
     - `CalendarWidgetProvider.kt` 스케일링: `(96f * scale).coerceIn(54f, 96f)` — Large 위젯에서 과도하게 커지지 않도록 상한 고정
-  - 이벤트 행 높이 32dp, 제목 22sp / 시간 20sp
+  - 이벤트 행 높이 32dp, 제목 22sp / 시간 20sp / 등록자(nameTag) 20sp
+  - **이벤트 행 레이아웃**: `[색상닷][시간][제목 weight=1][등록자 우측끝]` — nameTag는 독립 TextView(`event_name_tag`)로 우측 정렬, 없으면 GONE
   - 이벤트 탭 PendingIntent template은 반드시 **`FLAG_MUTABLE`** (FLAG_IMMUTABLE 시 fillIn extras 병합 안 됨)
   - **위젯 월 이동 시 일정 표시**: `WidgetDataCache.updateScheduleData`는 파일을 덮어쓰지 않고 **월별 키 단위로 병합** — 한 달치만 저장되던 버그 수정
-    - `syncWidgetNow` (앱 시작 시): 이전달·현재달·다음달 3개월을 `Promise.all`로 동시 조회 후 `syncWidgetDataBatch`로 일괄 전송
+    - `syncWidgetNow` (앱 시작 시): `getSchedulesForWidgetSync()`로 현재 월 기준 **±12개월(총 25개월)** 단일 쿼리 조회 후 `syncWidgetDataBatch`로 일괄 전송
+    - `getSchedulesForWidgetSync` (`src/db/scheduleDb.ts`): 범위 내 비반복+반복 전개 일정을 월별 `Map<string, Schedule[]>`으로 반환
     - `syncWidgetDataBatch` (`src/utils/widgetSync.ts`): 여러 달 데이터를 단일 브릿지 호출로 전송
     - `WidgetModule.triggerWidgetUpdate`: 불투명 + 투명 4종 Provider 모두 포함 필수
+  - **위젯 달 이동 시 날짜 선택 초기화**: `ACTION_PREV/NEXT_MONTH` 처리 시 `KEY_SELECTED_DATE`를 `""` 로 초기화 → 이전 달 선택 날짜 잔류 버그 수정
   - 위젯 탭 → 앱 복귀: `MainActivity.onNewIntent → setIntent(intent)` + JS `AppState` 리스너 → `getLaunchDate()`
   - **RemoteViews 제약**: `<View>` 사용 불가 — `<TextView>`, `<ImageView>`, `<FrameLayout>` 등 허용 클래스만 사용 가능
   - **Expo Go / 디버그 빌드에서 동작 안 함** — 릴리즈 APK에서만 테스트 가능
