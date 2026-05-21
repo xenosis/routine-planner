@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import {
   getSchedulesByDate,
   getSchedulesByMonth,
+  getSchedulesForWidgetSync,
   getMarkedDates,
   getMultiDayEventsForMonth,
   insertSchedule,
@@ -272,25 +273,26 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       const year = today.getFullYear();
       const month = today.getMonth() + 1;
 
-      // 이전 달
-      const prevMonth = month === 1 ? 12 : month - 1;
-      const prevYear  = month === 1 ? year - 1 : year;
-      // 다음 달
-      const nextMonth = month === 12 ? 1 : month + 1;
-      const nextYear  = month === 12 ? year + 1 : year;
+      // 현재 월 기준 ±12개월 범위를 단일 쿼리로 조회
+      // Date 생성자가 음수/초과 month를 자동으로 연도 보정
+      const startD = new Date(year, month - 1 - 12, 1);
+      const startYear = startD.getFullYear();
+      const startMonth = startD.getMonth() + 1;
+      const endD = new Date(year, month - 1 + 12, 1);
+      const endYear = endD.getFullYear();
+      const endMonth = endD.getMonth() + 1;
 
-      const [prev, curr, next] = await Promise.all([
-        getSchedulesByMonth(prevYear, prevMonth),
-        getSchedulesByMonth(year, month),
-        getSchedulesByMonth(nextYear, nextMonth),
-      ]);
+      const scheduleMap = await getSchedulesForWidgetSync(startYear, startMonth, endYear, endMonth);
 
-      // 3개월 데이터를 단일 브릿지 호출로 일괄 전송
-      syncWidgetDataBatch([
-        { year: prevYear, month: prevMonth, schedules: prev },
-        { year, month, schedules: curr },
-        { year: nextYear, month: nextMonth, schedules: next },
-      ]);
+      const items: Array<{ year: number; month: number; schedules: Schedule[] }> = [];
+      for (const [key, schedules] of scheduleMap) {
+        const [y, m] = key.split('-').map(Number);
+        items.push({ year: y, month: m, schedules });
+      }
+
+      if (items.length > 0) {
+        syncWidgetDataBatch(items);
+      }
     } catch (_) {}
   },
 

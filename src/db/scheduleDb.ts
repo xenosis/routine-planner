@@ -308,4 +308,89 @@ export async function getRepeatSchedulesWithAlarm(): Promise<Schedule[]> {
   return (data ?? []).map(rowToSchedule);
 }
 
+/**
+ * 위젯 동기화용: startYear/startMonth ~ endYear/endMonth 범위 내 모든 일정을
+ * 월별 Map으로 반환한다. 단일 쿼리로 처리해 네트워크 요청을 최소화한다.
+ */
+export async function getSchedulesForWidgetSync(
+  startYear: number, startMonth: number,
+  endYear: number, endMonth: number,
+): Promise<Map<string, Schedule[]>> {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const startDate = `${startYear}-${pad(startMonth)}-01`;
+  const endMonthDays = new Date(endYear, endMonth, 0).getDate();
+  const endDate = `${endYear}-${pad(endMonth)}-${pad(endMonthDays)}`;
+
+  const { data: nonRepeat, error: e1 } = await supabase
+    .from('schedules')
+    .select('*')
+    .or('repeat.is.null,repeat.eq.none')
+    .lte('date', endDate)
+    .or(`and(endDate.is.null,date.gte.${startDate}),and(endDate.not.is.null,endDate.gte.${startDate})`);
+
+  if (e1) throw new Error(e1.message);
+
+  const { data: repeatRows, error: e2 } = await supabase
+    .from('schedules')
+    .select('*')
+    .not('repeat', 'is', null)
+    .neq('repeat', 'none')
+    .lte('date', endDate)
+    .or(`repeatUntil.is.null,repeatUntil.gte.${startDate}`);
+
+  if (e2) throw new Error(e2.message);
+
+  // 월별 Map 초기화
+  const result = new Map<string, Schedule[]>();
+  let y = startYear, m = startMonth;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
+    result.set(`${y}-${pad(m)}`, []);
+    if (m === 12) { y++; m = 1; } else { m++; }
+  }
+
+  // 비반복 일정 분류
+  for (const row of nonRepeat ?? []) {
+    const s = rowToSchedule(row);
+    if (s.endDate) {
+      // 여러날 일정: 겹치는 달마다 원본 그대로 추가 (Kotlin에서 범위 체크)
+      for (const [key] of result) {
+        const [ky, km] = key.split('-').map(Number);
+        const mStart = `${key}-01`;
+        const mEnd = `${key}-${pad(new Date(ky, km, 0).getDate())}`;
+        if (s.date <= mEnd && s.endDate >= mStart) {
+          result.get(key)!.push(s);
+        }
+      }
+    } else {
+      const key = s.date.substring(0, 7);
+      result.get(key)?.push(s);
+    }
+  }
+
+  // 반복 일정 전개
+  for (const row of repeatRows ?? []) {
+    let cy = startYear, cm = startMonth;
+    while (cy < endYear || (cy === endYear && cm <= endMonth)) {
+      const monthStr = pad(cm);
+      const key = `${cy}-${monthStr}`;
+      const daysInMonth = new Date(cy, cm, 0).getDate();
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${cy}-${monthStr}-${pad(day)}`;
+        if (row.repeatUntil && dateStr > row.repeatUntil) break;
+        if (dateStr < row.date) continue;
+        if (matchesRepeatDate(row.repeat, row.date, dateStr)) {
+          result.get(key)?.push({ ...rowToSchedule(row), date: dateStr });
+        }
+      }
+      if (cm === 12) { cy++; cm = 1; } else { cm++; }
+    }
+  }
+
+  for (const schedules of result.values()) {
+    schedules.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  }
+
+  return result;
+}
+
 export type { Schedule as ScheduleType };
