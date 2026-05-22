@@ -62,7 +62,7 @@
 
 - **일정**: Supabase 연동, 반복 일정 (`matchesRepeatDate` → `src/utils/repeatDate.ts`), 여러날/이름표/장소
 - **루틴**: daily / weekly_days / weekly_count, 스트릭 계산 (`src/utils/streakCalc.ts`)
-- **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`)
+- **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`) / 알람 스위치 켤 때 `alarmTimes`가 비어 있으면 마감시각(0분) 자동 기본 추가
 - **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립 관리, 삭제·변경 시 '기타'로 마이그레이션
   - `database.ts` 시드: **세 탭 공통 6개** — 업무(#6366F1) / 개인(#10B981) / 건강(#F59E0B) / 학습(#3B82F6) / 가족(#EC4899) / 기타(#94A3B8, 기본값)
   - DB 마이그레이션: 앱 업데이트 시 누락 카테고리 자동 추가 + 루틴 탭 구 카테고리(운동/공부/청소/관리) 삭제 → 연관 루틴 기타로 변경
