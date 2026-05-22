@@ -158,6 +158,7 @@ export default function AddTodoScreen({
   const handleAlarmToggle = useCallback((val: boolean) => {
     setAlarmEnabled(val);
     if (val) {
+      setAlarmTimes((prev) => prev.length === 0 ? [0] : prev);
       setShowAddPanel(true);
     } else {
       setAlarmTimes([]);
