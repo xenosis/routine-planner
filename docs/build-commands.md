@@ -85,6 +85,29 @@ npm run build:apk
 > 3. `android/gradlew assembleRelease`
 > 4. 루트에 `doro-v{버전}.apk` 복사
 
+### USB 기기에 APK 설치
+
+> 빌드 후 USB로 연결된 실제 기기에 직접 설치.
+> 전제: 기기에서 **USB 디버깅** 활성화, PC에서 기기를 신뢰함(허용) 처리 완료.
+
+```powershell
+# 기기 인식 확인
+adb devices
+
+# APK 설치 (-r: 기존 앱 데이터 유지하며 덮어쓰기)
+adb install -r doro-v1.2.3.apk
+```
+
+**`device unauthorized` 오류** → 기기 화면의 "USB 디버깅 허용" 팝업에서 허용 후 재시도.
+허용 팝업이 안 뜨면:
+```powershell
+adb kill-server
+adb start-server
+adb install -r doro-v{버전}.apk
+```
+
+---
+
 ### 문제 해결
 
 **`prebuild --clean` 실행 중 파일 잠금 오류** (`EBUSY: resource busy or locked`)
