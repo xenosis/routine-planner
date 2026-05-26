@@ -9,11 +9,12 @@ import type { TimeUnit } from '../../constants/alarm';
 interface AlarmSectionProps {
   alarmTimes: number[];
   onAlarmTimesChange: (times: number[]) => void;
+  defaultOpen?: boolean;
 }
 
-export default function AlarmSection({ alarmTimes, onAlarmTimesChange }: AlarmSectionProps) {
+export default function AlarmSection({ alarmTimes, onAlarmTimesChange, defaultOpen = false }: AlarmSectionProps) {
   const theme = useTheme();
-  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [showAddPanel, setShowAddPanel] = useState(defaultOpen);
   const [customValue, setCustomValue] = useState('');
   const [customUnit, setCustomUnit] = useState<TimeUnit>('min');
 

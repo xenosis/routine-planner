@@ -620,7 +620,7 @@ export default function AddScheduleScreen({
           </View>
 
           {alarmEnabled && (
-            <AlarmSection alarmTimes={alarmTimes} onAlarmTimesChange={setAlarmTimes} />
+            <AlarmSection alarmTimes={alarmTimes} onAlarmTimesChange={setAlarmTimes} defaultOpen />
           )}
           </>
           )}

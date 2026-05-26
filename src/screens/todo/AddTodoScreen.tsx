@@ -357,7 +357,7 @@ export default function AddTodoScreen({
           </View>
 
           {alarmEnabled && (
-            <AlarmSection alarmTimes={alarmTimes} onAlarmTimesChange={setAlarmTimes} />
+            <AlarmSection alarmTimes={alarmTimes} onAlarmTimesChange={setAlarmTimes} defaultOpen />
           )}
 
           {/* 하단 여백 (저장 버튼 가림 방지) */}
