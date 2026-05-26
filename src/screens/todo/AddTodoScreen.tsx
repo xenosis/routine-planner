@@ -23,58 +23,12 @@ import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Todo } from '../../db/todoDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
-import { toLocalDateStr } from '../../utils/date';
+import { toLocalDateStr, generateId } from '../../utils/date';
+import { getCategoryColor } from '../../utils/categoryUtils';
+import { formatAlarmTime } from '../../utils/scheduleAlarms';
+import { ALARM_PRESETS, TIME_UNITS } from '../../constants/alarm';
+import type { TimeUnit } from '../../constants/alarm';
 import { useCategoryStore } from '../../store/categoryStore';
-import type { Category } from '../../db/categoryDb';
-
-// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
-function getCategoryColor(name: string, categories: Category[]): string {
-  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
-}
-
-// 알람 프리셋 (분 단위) — 마감 기준 N분 전
-const ALARM_PRESETS = [
-  { label: '마감시각', minutes: 0 },
-  { label: '10분', minutes: 10 },
-  { label: '30분', minutes: 30 },
-  { label: '1시간', minutes: 60 },
-  { label: '1일', minutes: 1440 },
-] as const;
-
-// 직접 입력 단위
-const TIME_UNITS = [
-  { label: '분', value: 'min' as const },
-  { label: '시간', value: 'hour' as const },
-  { label: '일', value: 'day' as const },
-  { label: '주', value: 'week' as const },
-] as const;
-
-type TimeUnit = 'min' | 'hour' | 'day' | 'week';
-
-
-/**
- * 분 단위를 사람이 읽기 쉬운 문자열로 변환한다.
- * 예: 10 → "10분 전", 60 → "1시간 전", 1440 → "1일 전"
- */
-function formatAlarmTime(minutes: number): string {
-  if (minutes === 0) return '마감 시각';
-  if (minutes < 60) return `${minutes}분 전`;
-  if (minutes < 1440) {
-    const h = minutes / 60;
-    return `${h === Math.floor(h) ? Math.floor(h) : h.toFixed(1)}시간 전`;
-  }
-  if (minutes < 10080) {
-    const d = minutes / 1440;
-    return `${d === Math.floor(d) ? Math.floor(d) : d.toFixed(1)}일 전`;
-  }
-  const w = minutes / 10080;
-  return `${w === Math.floor(w) ? Math.floor(w) : w.toFixed(1)}주 전`;
-}
-
-// 새 할일용 고유 ID 생성
-function generateId(): string {
-  return Date.now().toString() + Math.random().toString(36).slice(2);
-}
 
 interface AddTodoScreenProps {
   visible: boolean;

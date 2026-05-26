@@ -111,7 +111,7 @@ describe('initDatabase: 카테고리 시드 데이터는 한 번만 삽입된다
     jest.resetModules();
   });
 
-  it('categories가 비어있을 때 동시 3회 호출해도 INSERT는 13번만 실행된다', async () => {
+  it('categories가 비어있을 때 동시 3회 호출해도 INSERT는 33번만 실행된다', async () => {
     jest.resetModules();
     let insertCount = 0;
     const mockDb = makeMockDb({
@@ -127,8 +127,8 @@ describe('initDatabase: 카테고리 시드 데이터는 한 번만 삽입된다
     const { initDatabase } = require('../src/db/database') as DbModule;
     await Promise.all([initDatabase(), initDatabase(), initDatabase()]);
 
-    // 일정(4) + 루틴(5) + 할일(4) = 13개 기본 카테고리
-    expect(insertCount).toBe(13);
+    // 시드 6개 × 3탭 = 18 + 마이그레이션(commonCategories 5개 × 3탭 = 15, mock이 cnt:0 반환) = 33
+    expect(insertCount).toBe(33);
   });
 });
 

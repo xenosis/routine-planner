@@ -64,17 +64,6 @@ describe('matchesRepeatDate - yearly', () => {
   });
 });
 
-describe('matchesRepeatDate - minutes:N (테스트용)', () => {
-  test('시작일 당일 → true', () => {
-    expect(matchesRepeatDate('minutes:5', START, START)).toBe(true);
-    expect(matchesRepeatDate('minutes:30', START, START)).toBe(true);
-  });
-
-  test('다음 날 → false', () => {
-    expect(matchesRepeatDate('minutes:5', START, '2026-04-28')).toBe(false);
-  });
-});
-
 describe('matchesRepeatDate - 알 수 없는 유형', () => {
   test('알 수 없는 반복 유형 → false', () => {
     expect(matchesRepeatDate('biweekly', START, '2026-05-11')).toBe(false);

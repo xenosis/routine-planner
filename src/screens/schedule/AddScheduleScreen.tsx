@@ -25,38 +25,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import type { Schedule } from '../../db/scheduleDb';
 import MonthCalendar from '../../components/calendar/MonthCalendar';
+import { generateId } from '../../utils/date';
 import { useAuthStore } from '../../store/authStore';
 import {
   scheduleAlarmNotifications,
   scheduleNextRepeatAlarm,
   formatAlarmTime,
 } from '../../utils/scheduleAlarms';
+import { getCategoryColor } from '../../utils/categoryUtils';
+import { ALARM_PRESETS, TIME_UNITS } from '../../constants/alarm';
+import type { TimeUnit } from '../../constants/alarm';
 import { useCategoryStore } from '../../store/categoryStore';
-import type { Category } from '../../db/categoryDb';
-
-// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
-function getCategoryColor(name: string, categories: Category[]): string {
-  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
-}
-
-// 알람 프리셋 (분 단위)
-const ALARM_PRESETS = [
-  { label: '마감시각', minutes: 0 },
-  { label: '10분', minutes: 10 },
-  { label: '30분', minutes: 30 },
-  { label: '1시간', minutes: 60 },
-  { label: '1일', minutes: 1440 },
-] as const;
-
-// 직접 입력 단위
-const TIME_UNITS = [
-  { label: '분', value: 'min' as const },
-  { label: '시간', value: 'hour' as const },
-  { label: '일', value: 'day' as const },
-  { label: '주', value: 'week' as const },
-] as const;
-
-type TimeUnit = 'min' | 'hour' | 'day' | 'week';
 
 // 반복 옵션 목록
 const REPEAT_OPTIONS: Array<{ value: NonNullable<Schedule['repeat']>; label: string }> = [
@@ -75,10 +54,6 @@ interface AddScheduleScreenProps {
   onDelete?: () => void;      // 수정 모드일 때만 전달
 }
 
-// 새 일정용 고유 ID 생성
-function generateId(): string {
-  return Date.now().toString() + Math.random().toString(36).slice(2);
-}
 
 export default function AddScheduleScreen({
   visible,
