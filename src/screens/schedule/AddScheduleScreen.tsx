@@ -30,12 +30,10 @@ import { useAuthStore } from '../../store/authStore';
 import {
   scheduleAlarmNotifications,
   scheduleNextRepeatAlarm,
-  formatAlarmTime,
 } from '../../utils/scheduleAlarms';
 import { getCategoryColor } from '../../utils/categoryUtils';
-import { ALARM_PRESETS, TIME_UNITS } from '../../constants/alarm';
-import type { TimeUnit } from '../../constants/alarm';
 import { useCategoryStore } from '../../store/categoryStore';
+import AlarmSection from '../../components/common/AlarmSection';
 
 // 반복 옵션 목록
 const REPEAT_OPTIONS: Array<{ value: NonNullable<Schedule['repeat']>; label: string }> = [
@@ -110,11 +108,7 @@ export default function AddScheduleScreen({
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const [showLocationSearch, setShowLocationSearch] = useState(false);
 
-  // 복수 알람 상태
   const [alarmTimes, setAlarmTimes] = useState<number[]>(() => schedule?.alarmTimes ?? []);
-  const [showAddPanel, setShowAddPanel] = useState(false);
-  const [customValue, setCustomValue] = useState('');
-  const [customUnit, setCustomUnit] = useState<TimeUnit>('min');
 
   // Paper TextInput label 즉시 표시 트릭:
   // 값이 있는 필드는 measured=false일 때 label opacity=0으로 숨겨짐.
@@ -135,47 +129,13 @@ export default function AddScheduleScreen({
     return () => subscription.remove();
   }, [onClose]);
 
-  // 알람 토글 핸들러
   const handleAlarmToggle = useCallback((val: boolean) => {
     setAlarmEnabled(val);
     if (val) {
-      setShowAddPanel(true);
+      setAlarmTimes((prev) => prev.length === 0 ? [0] : prev);
     } else {
       setAlarmTimes([]);
-      setShowAddPanel(false);
     }
-  }, []);
-
-  // 프리셋 알람 추가 핸들러 (중복 방지, 오름차순 정렬)
-  const handleAddPreset = useCallback((minutes: number) => {
-    setAlarmTimes((prev) => {
-      if (prev.includes(minutes)) return prev;
-      return [...prev, minutes].sort((a, b) => a - b);
-    });
-  }, []);
-
-  // 직접 입력 알람 추가 핸들러
-  const handleAddCustom = useCallback(() => {
-    const num = parseInt(customValue, 10);
-    if (!num || num <= 0) return;
-
-    // 단위에 따라 분으로 변환
-    let minutes = num;
-    if (customUnit === 'hour') minutes = num * 60;
-    if (customUnit === 'day') minutes = num * 1440;
-    if (customUnit === 'week') minutes = num * 10080;
-
-    setAlarmTimes((prev) => {
-      if (prev.includes(minutes)) return prev;
-      return [...prev, minutes].sort((a, b) => a - b);
-    });
-    setCustomValue('');
-    setShowAddPanel(false);
-  }, [customValue, customUnit]);
-
-  // 알람 항목 제거 핸들러
-  const handleRemoveAlarm = useCallback((minutes: number) => {
-    setAlarmTimes((prev) => prev.filter((m) => m !== minutes));
   }, []);
 
   // 저장 처리
@@ -659,155 +619,8 @@ export default function AddScheduleScreen({
             />
           </View>
 
-          {/* 알람 상세 영역 (알람 켰을 때만 표시) */}
           {alarmEnabled && (
-            <View style={styles.alarmDetailSection}>
-
-              {/* 등록된 알람 목록 */}
-              {alarmTimes.map((mins) => (
-                <View
-                  key={mins}
-                  style={[
-                    styles.alarmTimeItem,
-                    { backgroundColor: theme.colors.surfaceVariant },
-                  ]}
-                >
-                  <Text style={[styles.alarmTimeIcon, { color: theme.colors.primary }]}>
-                    ○
-                  </Text>
-                  <Text style={[styles.alarmTimeText, { color: theme.colors.onSurface }]}>
-                    {formatAlarmTime(mins)}
-                  </Text>
-                  <IconButton
-                    icon="close"
-                    size={16}
-                    iconColor={theme.colors.onSurfaceVariant}
-                    onPress={() => handleRemoveAlarm(mins)}
-                    style={styles.removeAlarmBtn}
-                  />
-                </View>
-              ))}
-
-              {/* 알람 추가 패널 토글 */}
-              {!showAddPanel ? (
-                // 패널 닫힘: "+ 알람 추가" 버튼
-                <TouchableOpacity
-                  style={styles.addAlarmBtn}
-                  onPress={() => setShowAddPanel(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.addAlarmBtnText, { color: theme.colors.primary }]}>
-                    + 알람 추가
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                // 패널 열림: 프리셋 + 직접 입력
-                <View
-                  style={[
-                    styles.addPanel,
-                    { backgroundColor: theme.colors.surfaceVariant, borderColor: theme.colors.outlineVariant },
-                  ]}
-                >
-                  {/* 빠른 선택 섹션 */}
-                  <Text style={[styles.panelSectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-                    빠른 선택
-                  </Text>
-                  <View style={styles.presetRow}>
-                    {ALARM_PRESETS.map((preset) => {
-                      const isSelected = alarmTimes.includes(preset.minutes);
-                      return (
-                        <Chip
-                          key={preset.minutes}
-                          mode={isSelected ? 'flat' : 'outlined'}
-                          selected={isSelected}
-                          onPress={() => handleAddPreset(preset.minutes)}
-                          style={styles.presetChip}
-                          compact
-                        >
-                          {preset.label}
-                        </Chip>
-                      );
-                    })}
-                  </View>
-
-                  {/* 직접 입력 섹션 */}
-                  <Text style={[styles.panelSectionLabel, { color: theme.colors.onSurfaceVariant }]}>
-                    직접 입력
-                  </Text>
-                  <View style={styles.customInputRow}>
-                    {/* 숫자 입력 */}
-                    <TextInput
-                      value={customValue}
-                      onChangeText={setCustomValue}
-                      mode="outlined"
-                      keyboardType="numeric"
-                      placeholder="숫자"
-                      style={styles.customInput}
-                      dense
-                    />
-
-                    {/* 단위 선택 (분/시간/일) */}
-                    <View style={styles.unitToggleRow}>
-                      {TIME_UNITS.map((unit) => (
-                        <TouchableOpacity
-                          key={unit.value}
-                          style={[
-                            styles.unitBtn,
-                            {
-                              backgroundColor:
-                                customUnit === unit.value
-                                  ? theme.colors.primary
-                                  : theme.colors.surface,
-                              borderColor: theme.colors.outline,
-                            },
-                          ]}
-                          onPress={() => setCustomUnit(unit.value)}
-                          activeOpacity={0.8}
-                        >
-                          <Text
-                            style={[
-                              styles.unitBtnText,
-                              {
-                                color:
-                                  customUnit === unit.value
-                                    ? theme.colors.onPrimary
-                                    : theme.colors.onSurface,
-                              },
-                            ]}
-                          >
-                            {unit.label}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-
-                    {/* 추가 버튼 */}
-                    <Button
-                      mode="contained"
-                      onPress={handleAddCustom}
-                      disabled={!customValue || parseInt(customValue, 10) <= 0}
-                      compact
-                      style={styles.customAddBtn}
-                    >
-                      추가
-                    </Button>
-                  </View>
-
-                  {/* 취소 버튼 */}
-                  <Button
-                    mode="text"
-                    onPress={() => {
-                      setShowAddPanel(false);
-                      setCustomValue('');
-                    }}
-                    style={styles.cancelPanelBtn}
-                    labelStyle={{ color: theme.colors.onSurfaceVariant }}
-                  >
-                    취소
-                  </Button>
-                </View>
-              )}
-            </View>
+            <AlarmSection alarmTimes={alarmTimes} onAlarmTimesChange={setAlarmTimes} />
           )}
           </>
           )}
@@ -1040,104 +853,6 @@ const styles = StyleSheet.create({
   },
   alarmSub: {
     fontSize: 11,
-  },
-  alarmDetailSection: {
-    marginTop: 2,
-    gap: spacing.xs,
-  },
-
-  // 등록된 알람 항목 한 행
-  alarmTimeItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: borderRadius.sm,
-    paddingLeft: spacing.sm,
-    paddingVertical: 0,
-    marginBottom: 3,
-  },
-  alarmTimeIcon: {
-    fontSize: 14,
-    marginRight: spacing.xs,
-  },
-  alarmTimeText: {
-    flex: 1,
-    fontSize: 14,
-  },
-  removeAlarmBtn: {
-    margin: 0,
-    marginRight: 0,
-  },
-
-  // "+ 알람 추가" 버튼
-  addAlarmBtn: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    alignSelf: 'flex-start',
-  },
-  addAlarmBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-
-  // 알람 추가 패널
-  addPanel: {
-    borderRadius: borderRadius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: spacing.md,
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  panelSectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.3,
-    marginBottom: 2,
-  },
-
-  // 프리셋 Chip 목록
-  presetRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  presetChip: {
-    marginBottom: 0,
-  },
-
-  // 직접 입력 행
-  customInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  customInput: {
-    width: 80,
-  },
-
-  // 단위 선택 버튼 3개 묶음
-  unitToggleRow: {
-    flexDirection: 'row',
-    gap: 2,
-  },
-  unitBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: borderRadius.sm,
-    borderWidth: 1,
-  },
-  unitBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  customAddBtn: {
-    marginLeft: spacing.xs,
-  },
-
-  // 패널 취소 버튼
-  cancelPanelBtn: {
-    alignSelf: 'flex-end',
-    marginTop: -spacing.xs,
   },
 
   // ── 공통 ──────────────────────────────────────
