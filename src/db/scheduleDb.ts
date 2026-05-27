@@ -392,3 +392,5 @@ export async function getSchedulesForWidgetSync(
 
   return result;
 }
+
+export type { Schedule as ScheduleType };

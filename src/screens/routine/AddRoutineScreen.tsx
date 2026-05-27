@@ -25,9 +25,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { borderRadius, spacing } from '../../theme';
 import TimeInput from '../../components/common/TimeInput';
 import type { Routine } from '../../db/routineDb';
-import { toLocalDateStr, generateId } from '../../utils/date';
-import { getCategoryColor } from '../../utils/categoryUtils';
+import { toLocalDateStr } from '../../utils/date';
 import { useCategoryStore } from '../../store/categoryStore';
+import type { Category } from '../../db/categoryDb';
+
+// 카테고리 이름으로 색상을 조회한다. 없으면 기본 회색 반환.
+function getCategoryColor(name: string, categories: Category[]): string {
+  return categories.find((c) => c.name === name)?.color ?? '#94A3B8';
+}
 
 // 요일 버튼 레이블 및 JS getDay() 매핑
 // 월(1) ~ 토(6) ~ 일(0) 순서
@@ -49,6 +54,10 @@ interface AddRoutineScreenProps {
   onDelete?: () => void;   // 수정 모드일 때만 전달
 }
 
+// 새 루틴용 고유 ID 생성
+function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).slice(2);
+}
 
 /**
  * 루틴 알람을 스케줄링한다.

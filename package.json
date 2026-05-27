@@ -1,6 +1,6 @@
 {
   "name": "routine-planner",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "main": "index.ts",
   "scripts": {
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=4096 expo start",
