@@ -5,3 +5,8 @@ export function toLocalDateStr(date: Date = new Date()): string {
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+
+/** 타임스탬프 기반 고유 ID 생성 */
+export function generateId(): string {
+  return Date.now().toString() + Math.random().toString(36).slice(2);
+}
