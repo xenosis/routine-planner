@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Button, Chip, IconButton, Text, TextInput, useTheme } from 'react-native-paper';
 import { borderRadius, spacing } from '../../theme';
@@ -9,11 +9,16 @@ import type { TimeUnit } from '../../constants/alarm';
 interface AlarmSectionProps {
   alarmTimes: number[];
   onAlarmTimesChange: (times: number[]) => void;
+  defaultOpen?: boolean;
 }
 
-export default function AlarmSection({ alarmTimes, onAlarmTimesChange }: AlarmSectionProps) {
+export default function AlarmSection({ alarmTimes, onAlarmTimesChange, defaultOpen }: AlarmSectionProps) {
   const theme = useTheme();
   const [showAddPanel, setShowAddPanel] = useState(false);
+
+  useEffect(() => {
+    if (defaultOpen) setShowAddPanel(true);
+  }, [defaultOpen]);
   const [customValue, setCustomValue] = useState('');
   const [customUnit, setCustomUnit] = useState<TimeUnit>('min');
 
