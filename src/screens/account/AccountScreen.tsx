@@ -1,12 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, IconButton, Surface, Text, TextInput, useTheme } from 'react-native-paper';
+import { ActivityIndicator, Button, IconButton, Snackbar, Surface, Text, TextInput, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
 import { spacing, borderRadius } from '../../theme';
 import { useAuthStore } from '../../store/authStore';
 import { useCategoryStore } from '../../store/categoryStore';
+import { useRoutineStore } from '../../store/routineStore';
+import { useTodoStore } from '../../store/todoStore';
+import { backupToSupabase, restoreFromSupabase, getLastBackupTime } from '../../db/backupDb';
 import type { Category } from '../../db/categoryDb';
 
 // ─────────────────────────────────────────────
@@ -182,6 +185,83 @@ export default function AccountScreen(): React.JSX.Element {
   const [displayName, setDisplayName] = useState(savedName);
   const [selectedColor, setSelectedColor] = useState(savedColor);
   const [saving, setSaving] = useState(false);
+
+  // ── 백업/복원 상태 ──────────────────────────
+  const fetchRoutines = useRoutineStore((s) => s.fetchRoutines);
+  const fetchTodos = useTodoStore((s) => s.fetchTodos);
+  const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
+  const [snackMessage, setSnackMessage] = useState('');
+  const [snackVisible, setSnackVisible] = useState(false);
+
+  const showSnack = (msg: string) => {
+    setSnackMessage(msg);
+    setSnackVisible(true);
+  };
+
+  const loadLastBackupTime = useCallback(async () => {
+    if (!session?.user.id) return;
+    const time = await getLastBackupTime(session.user.id);
+    setLastBackupTime(time);
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    loadLastBackupTime();
+  }, [loadLastBackupTime]);
+
+  const handleBackup = async () => {
+    if (!session?.user.id) return;
+    setBackupLoading(true);
+    try {
+      await backupToSupabase(session.user.id);
+      await loadLastBackupTime();
+      showSnack('백업 완료');
+    } catch (e) {
+      Alert.alert('백업 실패', e instanceof Error ? e.message : '알 수 없는 오류');
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleRestore = () => {
+    Alert.alert(
+      '데이터 복원',
+      '현재 데이터가 모두 지워지고 백업 데이터로 덮어씁니다. 계속할까요?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '복원',
+          style: 'destructive',
+          onPress: async () => {
+            if (!session?.user.id) return;
+            setRestoreLoading(true);
+            try {
+              await restoreFromSupabase(session.user.id);
+              await Promise.all([
+                fetchAllCategories(),
+                fetchRoutines(),
+                fetchTodos(),
+              ]);
+              showSnack('복원 완료');
+            } catch (e) {
+              Alert.alert('복원 실패', e instanceof Error ? e.message : '알 수 없는 오류');
+            } finally {
+              setRestoreLoading(false);
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
+  const formatBackupTime = (iso: string | null): string => {
+    if (!iso) return '없음';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   useEffect(() => {
     setDisplayName(session?.user.user_metadata?.display_name ?? '');
@@ -470,6 +550,43 @@ export default function AccountScreen(): React.JSX.Element {
           )}
         </Surface>
 
+        {/* ── 데이터 관리 섹션 ──────────────────── */}
+        {session && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.onBackground }]}>데이터 관리</Text>
+            </View>
+            <Surface style={[styles.card, styles.backupCard, { backgroundColor: theme.colors.surface }]} elevation={1}>
+              <View style={styles.backupTimeRow}>
+                <MaterialCommunityIcons name="cloud-check-outline" size={16} color={theme.colors.onSurfaceVariant} />
+                <Text style={[styles.cardLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  마지막 백업: {formatBackupTime(lastBackupTime)}
+                </Text>
+              </View>
+              <View style={styles.backupButtonRow}>
+                <Button
+                  mode="contained-tonal"
+                  onPress={handleBackup}
+                  disabled={backupLoading || restoreLoading}
+                  style={styles.backupBtn}
+                  icon={backupLoading ? undefined : 'cloud-upload-outline'}
+                >
+                  {backupLoading ? <ActivityIndicator size={16} /> : '백업하기'}
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={handleRestore}
+                  disabled={backupLoading || restoreLoading || !lastBackupTime}
+                  style={styles.backupBtn}
+                  icon={restoreLoading ? undefined : 'cloud-download-outline'}
+                >
+                  {restoreLoading ? <ActivityIndicator size={16} /> : '복원하기'}
+                </Button>
+              </View>
+            </Surface>
+          </>
+        )}
+
         {/* 로그아웃 버튼 */}
         <Button
           mode="outlined"
@@ -483,6 +600,14 @@ export default function AccountScreen(): React.JSX.Element {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      <Snackbar
+        visible={snackVisible}
+        onDismiss={() => setSnackVisible(false)}
+        duration={2500}
+      >
+        {snackMessage}
+      </Snackbar>
 
       {/* 카테고리 추가/수정 모달 */}
       <CategoryModal
@@ -656,6 +781,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: spacing.lg,
     fontSize: 14,
+  },
+  backupCard: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+  },
+  backupTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  backupButtonRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  backupBtn: {
+    flex: 1,
+    borderRadius: borderRadius.sm,
   },
   logoutButton: {
     marginHorizontal: spacing.base,

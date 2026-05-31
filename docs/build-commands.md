@@ -125,7 +125,7 @@ npm run build:apk
 adb devices
 
 # 설치 (-r: 기존 앱 데이터 유지하며 덮어쓰기)
-adb install -r doro-v1.2.3.apk
+adb install -r doro-v1.2.4.apk
 ```
 
 **`device unauthorized` 오류** → 기기 화면의 "USB 디버깅 허용" 팝업에서 허용 후 재시도.
