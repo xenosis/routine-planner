@@ -3,7 +3,7 @@
 매일의 루틴을 반복하고 성과를 확인하는 Android 개인 플래너 앱입니다.  
 일정, 루틴, 할일을 한 곳에서 관리하고 연속 달성 스트릭으로 동기부여를 유지하세요.
 
-**현재 버전: v1.2.3**
+**현재 버전: v1.2.9**
 
 ---
 
@@ -49,6 +49,7 @@
 - 작성자 이름 + 색상 설정 (일정 이름표에 반영)
 - **카테고리 관리**: 일정 / 루틴 / 할일 탭별 독립 카테고리 (추가/수정/삭제/순서 변경)
   - 탭 간 공통 카테고리 이름·색상·순서 자동 동기화
+- **데이터 백업/복원**: 루틴·할일·카테고리를 Supabase에 백업, 앱 재설치 후 복원 가능
 - 미로그인 시 LoginScreen 표시
 
 ### Android 홈 화면 위젯
@@ -90,7 +91,8 @@ src/
 │   ├── routineDb.ts         # 루틴 CRUD, 스트릭, 주간 완료
 │   ├── achievementDb.ts     # 달성률 조회
 │   ├── todoDb.ts            # 할일 CRUD
-│   └── categoryDb.ts        # 카테고리 CRUD (탭별 독립)
+│   ├── categoryDb.ts        # 카테고리 CRUD (탭별 독립)
+│   └── backupDb.ts          # Supabase 백업/복원
 ├── lib/
 │   └── supabase.ts          # Supabase 클라이언트
 ├── store/
@@ -185,7 +187,7 @@ npm test         # Jest 단위 테스트 실행 (59개)
 npm run build:apk
 
 # USB 연결 기기에 직접 설치
-adb install -r doro-v1.2.3.apk
+adb install -r doro-v1.2.9.apk
 ```
 
 EAS 클라우드 빌드 및 상세 빌드 옵션 → [`docs/build-commands.md`](docs/build-commands.md)
