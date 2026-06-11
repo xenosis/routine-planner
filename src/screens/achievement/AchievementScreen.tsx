@@ -268,7 +268,7 @@ function buildRateDates(
     activeDays++;
     totalRate += rate;
     if (rate >= 100) perfectDays++;
-    if (rate >= 80 && rate < 100) excellentDays++;
+    if (rate >= 80) excellentDays++;
   }
 
   return {
@@ -474,15 +474,15 @@ const WeeklyChart = React.memo(function WeeklyChart({
       <View style={chartStyles.legend}>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: '#10B981' }]} />
-          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>80%+</Text>
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>80% 이상</Text>
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: theme.colors.primary }]} />
-          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>60%+</Text>
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>60% 이상</Text>
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: '#F59E0B' }]} />
-          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>40%+</Text>
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>40% 이상</Text>
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: '#EF4444' }]} />
@@ -710,7 +710,7 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
         <View style={[calendarStyles.statsDivider, { backgroundColor: theme.colors.outlineVariant }]} />
         <View style={calendarStyles.statsCell}>
           <Text style={[calendarStyles.statsValue, { color: theme.colors.primary }]}>{stats.excellentDays}일</Text>
-          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>80~99%</Text>
+          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>80% 이상</Text>
         </View>
         <View style={[calendarStyles.statsDivider, { backgroundColor: theme.colors.outlineVariant }]} />
         <View style={calendarStyles.statsCell}>
