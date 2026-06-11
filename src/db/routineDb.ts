@@ -223,3 +223,37 @@ export async function updateStreak(
   const db = await getDb();
   await db.runAsync('UPDATE routines SET streak = ? WHERE id = ?', [streak, routineId]);
 }
+
+/**
+ * streak > 0인 모든 루틴의 스트릭을 오늘 날짜 기준으로 재계산하여 DB에 반영한다.
+ * 날짜가 바뀌어도 앱이 재계산하지 않아 불꽃이 남아있는 문제를 방지한다.
+ */
+export async function recalculateAllStreaks(): Promise<void> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<RoutineRow>(
+    'SELECT id, frequency, weekdays, weekly_count, streak FROM routines WHERE streak > 0',
+  );
+  if (rows.length === 0) return;
+
+  const today = toLocalDateStr();
+  for (const row of rows) {
+    let weekdays: number[] | undefined;
+    if (row.weekdays) {
+      try { weekdays = JSON.parse(row.weekdays) as number[]; } catch { weekdays = undefined; }
+    }
+    const completionRows = await db.getAllAsync<{ date: string }>(
+      'SELECT date FROM routine_completions WHERE routineId = ? ORDER BY date DESC',
+      [row.id],
+    );
+    const completedDates = new Set(completionRows.map((r) => r.date));
+    const newStreak = calculateStreakFromDates(
+      completedDates,
+      today,
+      row.frequency === 'weekly_days' ? weekdays : undefined,
+      row.frequency === 'weekly_count' ? (row.weekly_count ?? undefined) : undefined,
+    );
+    if (newStreak !== row.streak) {
+      await db.runAsync('UPDATE routines SET streak = ? WHERE id = ?', [newStreak, row.id]);
+    }
+  }
+}

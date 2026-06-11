@@ -11,6 +11,7 @@ import {
   calculateStreak,
   updateStreak,
   getWeekCompletions,
+  recalculateAllStreaks,
 } from '../db/routineDb';
 
 // Routine 타입을 스토어 파일에서도 re-export하여 UI 레이어가 단일 진입점으로 사용 가능하게 한다.
@@ -71,9 +72,10 @@ export const useRoutineStore = create<RoutineState>((set, get) => ({
   // ── 조회 ────────────────────────────────────
 
   fetchRoutines: async () => {
+    // 스트릭이 끊어진 루틴을 반영하기 위해 매 조회 시 재계산
+    await recalculateAllStreaks();
     const routines = await getAllRoutines();
     set({ routines });
-    // 루틴 목록 갱신 후 이번 주 완료 현황도 함께 갱신
     await get().fetchWeekCompletions();
   },
 

@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -41,22 +42,65 @@ export default function RoutineScreen(): React.JSX.Element {
   const [editingRoutine, setEditingRoutine] = useState<Routine | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<'today' | 'all'>('today');
 
-  const today = toLocalDateStr();
+  // today를 state로 관리 — 자정 이후 앱이 갱신될 때 날짜 표시도 업데이트됨
+  const todayRef = useRef(toLocalDateStr());
+  const [today, setToday] = useState(() => todayRef.current);
 
   // 마운트 시 데이터 로드 (DB 초기화는 AppNavigator에서 처리)
   useEffect(() => {
     async function init() {
       await fetchRoutines();
-      await fetchCompletions(today);
+      await fetchCompletions(todayRef.current);
       await fetchWeekCompletions();
     }
     init();
   }, []);
 
+  // 날짜가 바뀌었을 때 호출 — 완료 내역 초기화 + 스트릭 재계산
+  const refreshIfDateChanged = useCallback(async () => {
+    const newToday = toLocalDateStr();
+    if (newToday === todayRef.current) return;
+    todayRef.current = newToday;
+    setToday(newToday);
+    useRoutineStore.setState({ selectedDate: newToday });
+    await fetchRoutines();
+    await fetchCompletions(newToday);
+    await fetchWeekCompletions();
+  }, [fetchRoutines, fetchCompletions, fetchWeekCompletions]);
+
+  // 자정 타이머 + AppState 리스너: 두 케이스 모두 처리
+  // - 앱 켜진 채로 자정 통과 → setTimeout
+  // - 백그라운드 → 포그라운드 복귀 → AppState
+  useEffect(() => {
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refreshIfDateChanged();
+    });
+
+    let timer: ReturnType<typeof setTimeout>;
+    function scheduleMidnight() {
+      const now = new Date();
+      // 다음 자정 + 5초 (타이밍 여유)
+      const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+      timer = setTimeout(() => {
+        refreshIfDateChanged();
+        scheduleMidnight(); // 다음 날 자정 타이머 재등록
+      }, midnight.getTime() - Date.now());
+    }
+    scheduleMidnight();
+
+    return () => {
+      appStateSub.remove();
+      clearTimeout(timer);
+    };
+  }, [refreshIfDateChanged]);
+
   // 오늘 요일 기준으로 표시할 루틴 필터링
   // daily → 항상 / weekly_days → 해당 요일만
   // weekly_count → quota 달성 AND 오늘 미체크 시 제외 (이미 이번 주 목표 달성)
-  const todayDayOfWeek = useMemo(() => new Date().getDay(), []);
+  const todayDayOfWeek = useMemo(() => {
+    const [y, m, d] = today.split('-').map(Number);
+    return new Date(y, m - 1, d).getDay();
+  }, [today]);
 
   const todayRoutines = useMemo(() => {
     return routines.filter((r) => {
