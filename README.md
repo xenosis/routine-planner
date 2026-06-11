@@ -3,7 +3,7 @@
 매일의 루틴을 반복하고 성과를 확인하는 Android 개인 플래너 앱입니다.  
 일정, 루틴, 할일을 한 곳에서 관리하고 연속 달성 스트릭으로 동기부여를 유지하세요.
 
-**현재 버전: v1.2.9**
+**현재 버전: v1.3.1**
 
 ---
 
@@ -50,6 +50,7 @@
 - **카테고리 관리**: 일정 / 루틴 / 할일 탭별 독립 카테고리 (추가/수정/삭제/순서 변경)
   - 탭 간 공통 카테고리 이름·색상·순서 자동 동기화
 - **데이터 백업/복원**: 루틴·할일·카테고리를 Supabase에 백업, 앱 재설치 후 복원 가능
+- **알림 재등록**: 푸시 알림 토큰 수동 재등록 버튼 (기기 변경·재설치 후 사용)
 - 미로그인 시 LoginScreen 표시
 
 ### Android 홈 화면 위젯
@@ -187,7 +188,7 @@ npm test         # Jest 단위 테스트 실행 (59개)
 npm run build:apk
 
 # USB 연결 기기에 직접 설치
-adb install -r doro-v1.2.9.apk
+adb install -r doro-v1.3.1.apk
 ```
 
 EAS 클라우드 빌드 및 상세 빌드 옵션 → [`docs/build-commands.md`](docs/build-commands.md)
@@ -212,3 +213,4 @@ EAS 클라우드 빌드 및 상세 빌드 옵션 → [`docs/build-commands.md`](
 | [`docs/data-models.md`](docs/data-models.md) | DB 스키마, 알람 ID 패턴, 카테고리 색상 |
 | [`docs/build-commands.md`](docs/build-commands.md) | 개발 서버, 로컬 APK 빌드, EAS 빌드, ADB 설치 |
 | [`docs/test-checklist.md`](docs/test-checklist.md) | 수동 회귀 테스트 시나리오 |
+| [`docs/push-notification-setup.md`](docs/push-notification-setup.md) | 크로스 유저 푸시 알림 설정 (FCM·Expo·Edge Function) |

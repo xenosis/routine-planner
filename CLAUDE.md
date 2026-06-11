@@ -49,7 +49,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-05-27, v1.2.7)
+## 현재 구현 상태 (2026-06-11, v1.3.1)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -62,6 +62,8 @@
 
 - **일정**: Supabase 연동, 반복 일정 (`matchesRepeatDate` → `src/utils/repeatDate.ts`), 여러날/이름표/장소
 - **루틴**: daily / weekly_days / weekly_count, 스트릭 계산 (`src/utils/streakCalc.ts`)
+  - `recalculateAllStreaks()` (`routineDb.ts`): `fetchRoutines` 호출 시마다 streak > 0인 루틴을 오늘 기준 재계산 → 연속이 끊겼을 때 불꽃 자동 소멸
+  - `RoutineScreen` 자정 타이머 + AppState 리스너: 앱 켜진 채 자정 통과 또는 백그라운드 복귀 시 날짜 변경 감지 → 완료 내역 초기화 + 스트릭 재계산
 - **할일**: 마감 후속 알람 자동 등록 (`{todoId}_late_0/1/2`) / 알람 스위치 켤 때 `alarmTimes`가 비어 있으면 마감시각(0분) 자동 기본 추가
 - **AlarmSection**: `src/components/common/AlarmSection.tsx` — 알람 UI 공통 컴포넌트. **절대 금지**: `defaultOpen = false` 디스트럭처링 기본값 + `useState(defaultOpen)` 패턴 — Hermes에서 모듈 초기화 크래시 발생 (v1.2.5 교훈). 초기 open 상태는 항상 리터럴 `useState(false)` 사용.
 - **카테고리**: `categoryDb.ts` + `categoryStore.ts` — 탭별 독립 관리, 삭제·변경 시 '기타'로 마이그레이션
@@ -99,7 +101,14 @@
   - **RemoteViews 제약**: `<View>` 사용 불가 — `<TextView>`, `<ImageView>`, `<FrameLayout>` 등 허용 클래스만 사용 가능
   - **Expo Go / 디버그 빌드에서 동작 안 함** — 릴리즈 APK에서만 테스트 가능
 - **크로스 유저 푸시 알림**: `addSchedule()` → Edge Function `notify-schedule` → Expo Push API
-  - 로그인 시 `registerPushToken()` 자동 호출 → `user_push_tokens` 테이블 upsert
+  - 로그인·앱 시작 시 `registerPushToken()` 자동 호출 → `user_push_tokens` 테이블 upsert
+  - 토큰 등록 실패 시 명확한 에러 throw (권한 없음 / projectId 없음 / DB 저장 실패)
+  - 계정 탭 **"알림 재등록"** 버튼: 수동으로 토큰 재등록 가능, 결과 Snackbar 표시
+  - Edge Function 배포 필수: `npx supabase functions deploy notify-schedule`
+  - FCM 서버 키 등록 필수: Firebase 서비스 계정 키 → Expo 대시보드 Credentials → FCM V1 Service Account Key (미설정 시 `InvalidCredentials` 에러)
+  - 설정 전체 과정: `docs/push-notification-setup.md`
+- **일정 저장 중복 방지**: `AddScheduleScreen` `isSaving` 상태로 저장 진행 중 버튼 비활성화 (더블 탭 → 두 번 INSERT 버그 수정)
+- **일정 포그라운드 갱신**: `ScheduleScreen` AppState 리스너 — 백그라운드 복귀 시 현재 뷰 자동 재조회 (Realtime WebSocket 재연결 대기 없이 즉시 최신화)
 - **알림 탭 이동 (killed 상태)**: `App.tsx` → `setPendingNotifType` + rAF 재귀 → `consumePendingNotifType`
   - AppNavigator도 auth 완료 후 시도 — 먼저 소비하는 쪽이 이동, 나머지는 무시
 - **Android 알람**: 반복 알람은 다음 발생 1건만 예약, 탭 시 재등록
@@ -126,3 +135,4 @@
 - `docs/data-models.md` — DB 스키마, 알람 ID 패턴, 스트릭/달성률 계산, 카테고리 색상
 - `docs/test-checklist.md` — 수동 회귀 테스트 시나리오 목록
 - `docs/build-commands.md` — 개발 서버, 로컬 APK 빌드, EAS 빌드 명령어 모음
+- `docs/push-notification-setup.md` — 크로스 유저 푸시 알림 전체 설정 과정 (FCM·Expo·Edge Function)

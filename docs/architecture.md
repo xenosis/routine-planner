@@ -28,12 +28,12 @@ src/
     auth/
       LoginScreen.tsx        - 이메일/비밀번호 로그인 화면
     account/
-      AccountScreen.tsx      - 계정 탭 (이메일 표시, 작성자 이름+색상 설정, 카테고리 관리, 로그아웃)
+      AccountScreen.tsx      - 계정 탭 (이메일 표시, 작성자 이름+색상 설정, 카테고리 관리, 알림 재등록, 로그아웃)
     schedule/
-      ScheduleScreen.tsx     - 일정 메인 화면 (달력 + 목록, 실시간 구독, 월 전체 보기 버튼)
-      AddScheduleScreen.tsx  - 일정 추가/수정 모달 (하단 삭제/저장 분리 버튼)
+      ScheduleScreen.tsx     - 일정 메인 화면 (달력 + 목록, 실시간 구독, 월 전체 보기 버튼, AppState 포그라운드 갱신)
+      AddScheduleScreen.tsx  - 일정 추가/수정 모달 (하단 삭제/저장 분리 버튼, isSaving 중복 저장 방지)
     routine/
-      RoutineScreen.tsx      - 루틴 화면 (탭 구조: 오늘의 루틴 / 내 루틴 관리)
+      RoutineScreen.tsx      - 루틴 화면 (탭 구조: 오늘의 루틴 / 내 루틴 관리, 자정 타이머 + AppState 날짜 갱신)
       AddRoutineScreen.tsx   - 루틴 추가/수정 모달 (하단 삭제/저장 분리 버튼)
     todo/
       TodoScreen.tsx         - 할일 화면 (진행중/완료 탭, 날짜 구분자, FAB)
@@ -85,6 +85,7 @@ src/
   - 수정: 이름 또는 색상 변경 → 기존 항목도 자동 반영
   - 삭제: 해당 카테고리 항목을 '기타'로 마이그레이션 후 삭제 ('기타' 자체는 삭제 불가)
   - `CategoryModal`: 선택된 색상 흰 테두리 강조 + 클릭 시 deselect 방지
+- **알림 재등록** 버튼: `registerPushToken()` 수동 호출, 결과 Snackbar 표시 (기기 변경·재설치 후 토큰 갱신용)
 - 로그아웃 버튼
 
 ---
@@ -117,7 +118,7 @@ routines: Routine[]
 completedIds: string[]               // 오늘 완료된 루틴 ID 목록
 weekCompletions: Record<string, string[]>  // 루틴ID → 이번 주 완료 날짜 배열
 
-fetchRoutines()
+fetchRoutines()                      // recalculateAllStreaks() 선행 호출 → streak 끊긴 루틴 자동 0 처리
 fetchCompletions(date)
 fetchWeekCompletions()               // 현재 주 월~일 기준 완료 현황
 addRoutine / updateRoutine / deleteRoutine
@@ -261,14 +262,16 @@ React Native JS (scheduleStore.syncWidgetNow / addSchedule / updateSchedule / de
 
 ### 관련 파일
 - `supabase/functions/notify-schedule/index.ts` — Deno Edge Function
-- `src/utils/pushTokenManager.ts` — 토큰 발급 + Supabase 저장
-- `authStore.signIn()` — 로그인 성공 시 `registerPushToken(userId)` 호출
-- `scheduleStore.addSchedule()` — insert 후 Edge Function invoke
+- `src/utils/pushTokenManager.ts` — 토큰 발급 + Supabase 저장 (실패 시 에러 throw)
+- `authStore.signIn() / initialize()` — 로그인·앱 시작 시 `registerPushToken(userId)` 호출
+- `scheduleStore.addSchedule/updateSchedule/deleteSchedule()` — insert/update/delete 후 Edge Function invoke
 
 ### 주의사항
-- Expo 푸시 토큰은 릴리즈 APK(프로덕션 빌드)에서만 발급 가능 (개발 빌드 시 null)
-- Edge Function 배포: `supabase functions deploy notify-schedule`
+- Expo 푸시 토큰은 릴리즈 APK(프로덕션 빌드)에서만 발급 가능 (개발 빌드 시 projectId 없음 → 에러)
+- Edge Function 배포: `npx supabase functions deploy notify-schedule`
+- FCM 서버 키 등록 필수: Firebase 서비스 계정 키 → Expo 대시보드 Credentials → FCM V1 Service Account Key
 - `user_push_tokens` 테이블 생성 + RLS 설정 필요 (Supabase 대시보드 SQL Editor)
+- 전체 설정 가이드: `docs/push-notification-setup.md`
 
 ---
 
