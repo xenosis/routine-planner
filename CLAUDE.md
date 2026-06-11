@@ -49,7 +49,7 @@
 
 ---
 
-## 현재 구현 상태 (2026-06-11, v1.3.1)
+## 현재 구현 상태 (2026-06-11, v1.4.0)
 
 ### 탭 구조
 일정 / 할일 / 루틴 / 성과 / 계정 (미로그인 시 LoginScreen 표시)
@@ -77,6 +77,9 @@
 - **DB 초기화 중앙화**: AppNavigator에서 `initDatabase()` 한 번만 (`dbReady` 게이트)
   - DB 완료 후 카테고리 전체 로드 (`fetchAllCategories`) + 위젯 즉시 동기화 (`syncWidgetNow`)
 - **성과탭**: `getThisWeekDays(today)` 기준 주간 달성률 / `weekly_count` 루틴은 오늘 목록·헤더·완료 카운트·주간 달성률·주간 차트 모두에서 완전 제외 (날짜 기반 지표와 개념 충돌)
+  - 요약 카드 4종 한 줄: 오늘 완료 / 주간 달성률 / 최고 스트릭 / 누적 완료
+  - 주간 차트: 4단계 색상(80%+초록/60%+인디고/40%+주황/<40%빨강) + 하단 주간 통계 요약(평균/100%달성일/최고요일)
+  - 월간 히트맵: `buildRateDates()` → 날짜별 달성률 Map + MonthlyStats / 5단계 배경색 / 월간 통계 카드 4종
 - **Android 홈 화면 위젯**: Medium(4×3) / Large(4×5) 월간 달력, Kotlin AppWidgetProvider
   - 위젯 4종: 불투명(Medium/Large) + 투명(Medium/Large) — `CalendarWidgetProvider`의 `abstract getLayoutId()`로 분기
   - 투명 버전: `widget_calendar_transparent.xml` (배경 없음, 텍스트 드롭 섀도우 적용)

@@ -7,10 +7,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { SegmentedButtons, Surface, Text, useTheme, ProgressBar } from 'react-native-paper';
+import { IconButton, SegmentedButtons, Surface, Text, useTheme, ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
-import { Calendar } from 'react-native-calendars';
 
 import {
   getRoutineAchievements,
@@ -200,20 +199,23 @@ function useAchievementData() {
   return { data, loading, error, reload: load };
 }
 
-type MarkedDates = Record<string, { selected?: boolean; selectedColor?: string; dotColor?: string; marked?: boolean }>;
+interface MonthlyStats {
+  activeDays: number;
+  perfectDays: number;
+  excellentDays: number;
+  avgRate: number;
+}
 
-/** 월간 마킹 데이터를 생성하는 순수 함수 */
-function buildMarkedDates(
+/** 날짜별 달성률(0~100) Map과 월간 통계를 반환하는 순수 함수 */
+function buildRateDates(
   year: number,
   month: number,
   today: string,
   routineSchedules: RoutineScheduleInfo[],
   routineCompletions: { routineId: string; date: string }[],
   earliestRoutineDate: string,
-): MarkedDates {
-  // 날짜별 완료 루틴 ID 집합
+): { rates: Map<string, number>; stats: MonthlyStats } {
   const completionsByDate = new Map<string, Set<string>>();
-  // 주 시작일 → 루틴 ID → 해당 주 완료 날짜 목록 (quota 누적 계산용)
   const weekRoutineDates = new Map<string, Map<string, string[]>>();
 
   for (const { routineId, date } of routineCompletions) {
@@ -227,9 +229,14 @@ function buildMarkedDates(
     wMap.get(routineId)!.push(date);
   }
 
-  const markedDates: MarkedDates = {};
+  const rates = new Map<string, number>();
   const daysInMonth = new Date(year, month, 0).getDate();
   const monthStr = String(month).padStart(2, '0');
+
+  let totalRate = 0;
+  let activeDays = 0;
+  let perfectDays = 0;
+  let excellentDays = 0;
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dayStr = String(day).padStart(2, '0');
@@ -238,7 +245,6 @@ function buildMarkedDates(
     if (dateKey > today) break;
     if (dateKey < earliestRoutineDate) continue;
 
-    // 이 날 이전에 이미 quota를 달성한 weekly_count 루틴 집합
     const ws = getWeekStart(dateKey);
     const wMap = weekRoutineDates.get(ws) ?? new Map<string, string[]>();
     const quotaMetBeforeThisDay = new Set(
@@ -254,24 +260,26 @@ function buildMarkedDates(
     const scheduled = getScheduledCountForDate(dateKey, routineSchedules, quotaMetBeforeThisDay);
     if (scheduled === 0) continue;
 
-    // quota 이미 달성된 weekly_count 완료분은 제외하고 카운트
     const routineIdsOnDay = completionsByDate.get(dateKey) ?? new Set<string>();
     const completed = [...routineIdsOnDay].filter((id) => !quotaMetBeforeThisDay.has(id)).length;
+    const rate = Math.min(Math.round((completed / scheduled) * 100), 100);
 
-    const isFullyDone = completed >= scheduled;
-    markedDates[dateKey] = {
-      marked: true,
-      dotColor: isFullyDone ? '#10B981' : completed > 0 ? '#F59E0B' : '#EF4444',
-    };
+    rates.set(dateKey, rate);
+    activeDays++;
+    totalRate += rate;
+    if (rate >= 100) perfectDays++;
+    if (rate >= 80 && rate < 100) excellentDays++;
   }
 
-  markedDates[today] = {
-    ...(markedDates[today] ?? {}),
-    selected: true,
-    selectedColor: '#6366F120',
+  return {
+    rates,
+    stats: {
+      activeDays,
+      perfectDays,
+      excellentDays,
+      avgRate: activeDays > 0 ? Math.round(totalRate / activeDays) : 0,
+    },
   };
-
-  return markedDates;
 }
 
 // ─────────────────────────────────────────────
@@ -299,82 +307,44 @@ const SummaryCards = React.memo(function SummaryCards({
 
   return (
     <View style={summaryStyles.wrapper}>
-      {/* 첫 번째 행: 오늘 완료 / 주간 달성률 / 최고 스트릭 */}
+      {/* 4개 카드 한 줄: 오늘 완료 / 주간 달성률 / 최고 스트릭 / 누적 완료 */}
       <View style={summaryStyles.row}>
-        {/* 오늘 완료 */}
-        <Surface
-          style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]}
-          elevation={1}
-        >
-          <MaterialCommunityIcons
-            name="check-circle-outline"
-            size={24}
-            color={theme.colors.secondary}
-          />
+        <Surface style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <MaterialCommunityIcons name="check-circle-outline" size={20} color={theme.colors.secondary} />
           <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
             {todayCompleted}
-            <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>
-              {' '}/ {todayScheduled}
-            </Text>
+            <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>/{todayScheduled}</Text>
           </Text>
-          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
-            오늘 완료
-          </Text>
+          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>오늘 완료</Text>
         </Surface>
 
-        {/* 주간 달성률 */}
-        <Surface
-          style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]}
-          elevation={1}
-        >
-          <MaterialCommunityIcons
-            name="chart-line"
-            size={24}
-            color={theme.colors.primary}
-          />
+        <Surface style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <MaterialCommunityIcons name="chart-line" size={20} color={theme.colors.primary} />
           <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
             {weeklyRate}
             <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>%</Text>
           </Text>
-          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
-            주간 달성률
-          </Text>
+          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>주간 달성률</Text>
         </Surface>
 
-        {/* 최고 스트릭 */}
-        <Surface
-          style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]}
-          elevation={1}
-        >
-          <MaterialCommunityIcons
-            name="fire"
-            size={24}
-            color="#F59E0B"
-          />
+        <Surface style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <MaterialCommunityIcons name="fire" size={20} color="#F59E0B" />
           <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
             {maxStreak}
             <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>{maxStreakUnit}</Text>
           </Text>
-          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
-            최고 스트릭
+          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>최고 스트릭</Text>
+        </Surface>
+
+        <Surface style={[summaryStyles.card, { backgroundColor: theme.colors.surface }]} elevation={1}>
+          <MaterialCommunityIcons name="trophy-outline" size={20} color="#6366F1" />
+          <Text style={[summaryStyles.value, { color: theme.colors.onSurface }]}>
+            {totalCompletions}
+            <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>회</Text>
           </Text>
+          <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>누적 완료</Text>
         </Surface>
       </View>
-
-      {/* 두 번째 행: 누적 완료 횟수 */}
-      <Surface
-        style={[summaryStyles.totalCard, { backgroundColor: theme.colors.surface }]}
-        elevation={1}
-      >
-        <MaterialCommunityIcons name="trophy-outline" size={20} color="#6366F1" />
-        <Text style={[summaryStyles.totalValue, { color: theme.colors.onSurface }]}>
-          {totalCompletions}
-          <Text style={[summaryStyles.valueUnit, { color: theme.colors.onSurfaceVariant }]}>회</Text>
-        </Text>
-        <Text style={[summaryStyles.label, { color: theme.colors.onSurfaceVariant }]}>
-          누적 완료 횟수
-        </Text>
-      </Surface>
     </View>
   );
 });
@@ -383,41 +353,30 @@ const summaryStyles = StyleSheet.create({
   wrapper: {
     marginHorizontal: spacing.base,
     marginBottom: spacing.base,
-    gap: spacing.sm,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   card: {
     flex: 1,
     borderRadius: borderRadius.md,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
-    gap: spacing.xs,
-  },
-  totalCard: {
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    gap: 2,
   },
   value: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: spacing.xs,
-  },
-  totalValue: {
     fontSize: 18,
     fontWeight: '700',
+    marginTop: 2,
   },
   valueUnit: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '400',
   },
   label: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -436,22 +395,40 @@ const WeeklyChart = React.memo(function WeeklyChart({
 }: WeeklyChartProps): React.JSX.Element {
   const theme = useTheme();
 
+  // 주간 통계 계산
+  const weeklyStats = useMemo(() => {
+    const activeDays = chartData.filter((d) => d.scheduled > 0);
+    const avgRate = activeDays.length > 0
+      ? Math.round(activeDays.reduce((s, d) => s + d.value, 0) / activeDays.length)
+      : 0;
+    const perfectDays = activeDays.filter((d) => d.value === 100).length;
+    const best = activeDays.reduce<{ label: string; value: number } | null>(
+      (b, d) => (b === null || d.value > b.value ? d : b),
+      null,
+    );
+    return { avgRate, perfectDays, best };
+  }, [chartData]);
+
   // react-native-gifted-charts BarChart 데이터 형식으로 변환
   const barData = useMemo(
     () =>
       chartData.map((item) => ({
         value: item.value,
         label: item.label,
-        // 막대 색상: 80% 이상이면 초록, 50% 이상이면 인디고, 그 미만이면 아웃라인
+        // 막대 색상 4단계: 예정 없음 → 회색, 80%+ → 초록, 60%+ → 인디고, 40%+ → 주황, <40% → 빨강
         frontColor:
-          item.value >= 80
+          item.scheduled === 0
+            ? theme.colors.outline
+            : item.value >= 80
             ? '#10B981'
-            : item.value >= 50
+            : item.value >= 60
             ? theme.colors.primary
-            : theme.colors.outline,
+            : item.value >= 40
+            ? '#F59E0B'
+            : '#EF4444',
         topLabelComponent: () => (
           <Text style={{ fontSize: 9, color: theme.colors.onSurfaceVariant, marginBottom: 2 }}>
-            {item.value > 0 ? item.value : '0%'}
+            {item.scheduled > 0 ? `${item.value}%` : ''}
           </Text>
         ),
       })),
@@ -473,30 +450,22 @@ const WeeklyChart = React.memo(function WeeklyChart({
 
       <BarChart
         data={barData}
-        // 차트 높이 및 너비 설정
-        height={120}
+        height={160}
         barWidth={28}
         barBorderRadius={6}
         spacing={14}
-        // Y축 범위: 0 ~ 110% (100% 막대 상단 레이블 잘림 방지)
         maxValue={110}
         noOfSections={4}
-        // 격자선 스타일
         rulesColor={theme.colors.outlineVariant}
         rulesType="solid"
-        // Y축 레이블 숨김 (퍼센트 표시 불필요)
         hideYAxisText
-        // X축 레이블 스타일
         xAxisLabelTextStyle={{
           fontSize: 11,
           color: theme.colors.onSurfaceVariant,
         }}
-        // X/Y축 선 색상
         xAxisColor={theme.colors.outlineVariant}
         yAxisColor="transparent"
-        // 배경색 투명
         backgroundColor="transparent"
-        // 애니메이션
         isAnimated
         animationDuration={500}
       />
@@ -509,11 +478,48 @@ const WeeklyChart = React.memo(function WeeklyChart({
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: theme.colors.primary }]} />
-          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>50%+</Text>
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>60%+</Text>
         </View>
         <View style={chartStyles.legendItem}>
-          <View style={[chartStyles.legendDot, { backgroundColor: theme.colors.outline }]} />
-          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>50% 미만</Text>
+          <View style={[chartStyles.legendDot, { backgroundColor: '#F59E0B' }]} />
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>40%+</Text>
+        </View>
+        <View style={chartStyles.legendItem}>
+          <View style={[chartStyles.legendDot, { backgroundColor: '#EF4444' }]} />
+          <Text style={[chartStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>40% 미만</Text>
+        </View>
+      </View>
+
+      {/* 주간 통계 요약 */}
+      <View style={[chartStyles.statsRow, { borderTopColor: theme.colors.outlineVariant }]}>
+        <View style={chartStyles.statItem}>
+          <Text style={[chartStyles.statValue, { color: theme.colors.onSurface }]}>
+            {weeklyStats.avgRate}%
+          </Text>
+          <Text style={[chartStyles.statLabel, { color: theme.colors.onSurfaceVariant }]}>이번 주 평균</Text>
+        </View>
+        <View style={[chartStyles.statDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+        <View style={chartStyles.statItem}>
+          <Text style={[chartStyles.statValue, { color: theme.colors.onSurface }]}>
+            {weeklyStats.perfectDays}일
+          </Text>
+          <Text style={[chartStyles.statLabel, { color: theme.colors.onSurfaceVariant }]}>100% 달성</Text>
+        </View>
+        <View style={[chartStyles.statDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+        <View style={chartStyles.statItem}>
+          {weeklyStats.best ? (
+            <>
+              <Text style={[chartStyles.statValue, { color: theme.colors.onSurface }]}>
+                {weeklyStats.best.label} <Text style={{ fontSize: 12 }}>{weeklyStats.best.value}%</Text>
+              </Text>
+              <Text style={[chartStyles.statLabel, { color: theme.colors.onSurfaceVariant }]}>최고 달성 요일</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[chartStyles.statValue, { color: theme.colors.onSurfaceVariant }]}>-</Text>
+              <Text style={[chartStyles.statLabel, { color: theme.colors.onSurfaceVariant }]}>최고 달성 요일</Text>
+            </>
+          )}
         </View>
       </View>
     </Surface>
@@ -556,11 +562,53 @@ const chartStyles = StyleSheet.create({
   legendText: {
     fontSize: 11,
   },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.base,
+    paddingTop: spacing.base,
+    borderTopWidth: 1,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    marginVertical: spacing.xs,
+  },
 });
 
 // ─────────────────────────────────────────────
 // 서브 컴포넌트: 월간 달성 캘린더
 // ─────────────────────────────────────────────
+
+const WEEK_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+const HEAT_COLORS = {
+  perfect: '#10B981',
+  excellent: '#34D39990',
+  good: '#6366F175',
+  fair: '#F59E0B75',
+  low: '#EF444455',
+};
+
+function getRateColor(rate: number | undefined): string {
+  if (rate === undefined) return 'transparent';
+  if (rate >= 100) return HEAT_COLORS.perfect;
+  if (rate >= 80) return HEAT_COLORS.excellent;
+  if (rate >= 60) return HEAT_COLORS.good;
+  if (rate >= 40) return HEAT_COLORS.fair;
+  if (rate > 0) return HEAT_COLORS.low;
+  return 'transparent';
+}
 
 interface MonthlyCalendarProps {
   today: string;
@@ -575,25 +623,65 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
 }: MonthlyCalendarProps): React.JSX.Element {
   const theme = useTheme();
   const [year, month] = today.split('-').map(Number);
-  // 현재 캘린더에 표시 중인 연/월 상태
   const [viewYear, setViewYear] = useState(year);
   const [viewMonth, setViewMonth] = useState(month);
-  const [markedDates, setMarkedDates] = useState<MarkedDates>({});
+  const [rates, setRates] = useState<Map<string, number>>(new Map());
+  const [stats, setStats] = useState<MonthlyStats>({ activeDays: 0, perfectDays: 0, excellentDays: 0, avgRate: 0 });
 
-  // 표시 월 변경 시 해당 달 데이터 재조회
   useEffect(() => {
     let cancelled = false;
     const monthStr = String(viewMonth).padStart(2, '0');
     const startDate = `${viewYear}-${monthStr}-01`;
     const daysInMonth = new Date(viewYear, viewMonth, 0).getDate();
     const endDate = `${viewYear}-${monthStr}-${String(daysInMonth).padStart(2, '0')}`;
-    getRoutineCompletionsInRange(startDate, endDate <= today ? endDate : today).then((routineCompletions) => {
+    getRoutineCompletionsInRange(startDate, endDate <= today ? endDate : today).then((completions) => {
       if (!cancelled) {
-        setMarkedDates(buildMarkedDates(viewYear, viewMonth, today, routineSchedules, routineCompletions, earliestRoutineDate));
+        const result = buildRateDates(viewYear, viewMonth, today, routineSchedules, completions, earliestRoutineDate);
+        setRates(result.rates);
+        setStats(result.stats);
       }
     });
     return () => { cancelled = true; };
   }, [viewYear, viewMonth, today, routineSchedules, earliestRoutineDate]);
+
+  const goToPrev = useCallback(() => {
+    let y = viewYear; let m = viewMonth - 1;
+    if (m < 1) { m = 12; y -= 1; }
+    setViewYear(y); setViewMonth(m);
+  }, [viewYear, viewMonth]);
+
+  const goToNext = useCallback(() => {
+    let y = viewYear; let m = viewMonth + 1;
+    if (m > 12) { m = 1; y += 1; }
+    setViewYear(y); setViewMonth(m);
+  }, [viewYear, viewMonth]);
+
+  // 날짜 셀 42개 계산 (6×7)
+  const cells = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay();
+    const lastDate = new Date(viewYear, viewMonth, 0).getDate();
+    const prevLastDate = new Date(viewYear, viewMonth - 1, 0).getDate();
+    const result: Array<{ dateStr: string; day: number; isCurrent: boolean }> = [];
+
+    for (let i = firstDay - 1; i >= 0; i--) {
+      const d = prevLastDate - i;
+      let y = viewYear; let m = viewMonth - 1;
+      if (m < 1) { m = 12; y -= 1; }
+      result.push({ dateStr: `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`, day: d, isCurrent: false });
+    }
+    for (let d = 1; d <= lastDate; d++) {
+      result.push({ dateStr: `${viewYear}-${String(viewMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`, day: d, isCurrent: true });
+    }
+    const remaining = 42 - result.length;
+    for (let d = 1; d <= remaining; d++) {
+      let y = viewYear; let m = viewMonth + 1;
+      if (m > 12) { m = 1; y += 1; }
+      result.push({ dateStr: `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`, day: d, isCurrent: false });
+    }
+    return result;
+  }, [viewYear, viewMonth]);
+
+  const canGoNext = `${viewYear}-${String(viewMonth).padStart(2,'0')}` < today.slice(0, 7);
 
   return (
     <Surface
@@ -608,56 +696,97 @@ const MonthlyCalendar = React.memo(function MonthlyCalendar({
         </Text>
       </View>
 
-      <Calendar
-        current={`${viewYear}-${String(viewMonth).padStart(2, '0')}-01`}
-        markedDates={markedDates}
-        // 미래 날짜 비활성화
-        maxDate={today}
-        // 월 이동 시 해당 달 데이터 재조회
-        onMonthChange={(dateObj) => {
-          setViewYear(dateObj.year);
-          setViewMonth(dateObj.month);
-        }}
-        theme={{
-          // 배경
-          calendarBackground: 'transparent',
-          // 날짜 텍스트
-          dayTextColor: theme.colors.onSurface,
-          // 비활성(미래) 날짜
-          textDisabledColor: theme.colors.outline,
-          // 오늘 날짜 텍스트
-          todayTextColor: theme.colors.primary,
-          // 선택된 날짜 배경
-          selectedDayBackgroundColor: theme.colors.primaryContainer,
-          selectedDayTextColor: theme.colors.onPrimaryContainer,
-          // 헤더 (월/년 표시)
-          monthTextColor: theme.colors.onSurface,
-          textMonthFontWeight: '700',
-          textMonthFontSize: 15,
-          // 요일 헤더
-          textSectionTitleColor: theme.colors.onSurfaceVariant,
-          // 화살표 색상
-          arrowColor: theme.colors.primary,
-          // dot 마커
-          dotColor: '#10B981',
-          selectedDotColor: '#10B981',
-        }}
-      />
+      {/* 월간 통계 카드 */}
+      <View style={[calendarStyles.statsGrid, { backgroundColor: theme.colors.surfaceVariant + '60', borderRadius: borderRadius.sm }]}>
+        <View style={calendarStyles.statsCell}>
+          <Text style={[calendarStyles.statsValue, { color: theme.colors.onSurface }]}>{stats.activeDays}일</Text>
+          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>예정일</Text>
+        </View>
+        <View style={[calendarStyles.statsDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+        <View style={calendarStyles.statsCell}>
+          <Text style={[calendarStyles.statsValue, { color: '#10B981' }]}>{stats.perfectDays}일</Text>
+          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>완전 완료</Text>
+        </View>
+        <View style={[calendarStyles.statsDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+        <View style={calendarStyles.statsCell}>
+          <Text style={[calendarStyles.statsValue, { color: theme.colors.primary }]}>{stats.excellentDays}일</Text>
+          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>80~99%</Text>
+        </View>
+        <View style={[calendarStyles.statsDivider, { backgroundColor: theme.colors.outlineVariant }]} />
+        <View style={calendarStyles.statsCell}>
+          <Text style={[calendarStyles.statsValue, { color: theme.colors.onSurface }]}>{stats.avgRate}%</Text>
+          <Text style={[calendarStyles.statsLabel, { color: theme.colors.onSurfaceVariant }]}>평균 달성률</Text>
+        </View>
+      </View>
 
-      {/* 범례 */}
+      {/* 월 이동 헤더 */}
+      <View style={calendarStyles.calHeader}>
+        <IconButton icon="chevron-left" size={20} iconColor={theme.colors.onSurface} onPress={goToPrev} style={calendarStyles.headerBtn} />
+        <Text style={[calendarStyles.calTitle, { color: theme.colors.onSurface }]}>
+          {viewYear}년 {viewMonth}월
+        </Text>
+        <IconButton icon="chevron-right" size={20} iconColor={canGoNext ? theme.colors.onSurface : theme.colors.outline} onPress={canGoNext ? goToNext : undefined} style={calendarStyles.headerBtn} />
+      </View>
+
+      {/* 요일 헤더 */}
+      <View style={calendarStyles.weekRow}>
+        {WEEK_LABELS.map((label, idx) => (
+          <View key={label} style={calendarStyles.weekCell}>
+            <Text style={[calendarStyles.weekText, {
+              color: idx === 0 ? '#EF4444' : idx === 6 ? '#3B82F6' : theme.colors.onSurfaceVariant,
+            }]}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* 날짜 그리드 (히트맵) */}
+      <View style={calendarStyles.grid}>
+        {cells.map((cell) => {
+          const isToday = cell.dateStr === today;
+          const isFuture = cell.dateStr > today;
+          const rate = cell.isCurrent && !isFuture ? rates.get(cell.dateStr) : undefined;
+          const bgColor = getRateColor(rate);
+
+          let textColor = theme.colors.onBackground;
+          if (!cell.isCurrent) textColor = theme.colors.outline;
+          else if (isFuture) textColor = theme.colors.outline;
+          else if (isToday) textColor = '#FFFFFF';
+          else if (rate !== undefined && rate >= 100) textColor = '#FFFFFF';
+
+          return (
+            <View key={cell.dateStr} style={calendarStyles.dayCell}>
+              <View style={[
+                calendarStyles.dayCircle,
+                { backgroundColor: isToday ? theme.colors.primary : bgColor },
+                isToday && calendarStyles.todayCircle,
+              ]}>
+                <Text style={[
+                  calendarStyles.dayText,
+                  { color: textColor },
+                  !cell.isCurrent && { opacity: 0.3 },
+                ]}>
+                  {cell.day}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* 히트맵 범례 */}
       <View style={[calendarStyles.legend, { borderTopColor: theme.colors.outlineVariant }]}>
-        <View style={calendarStyles.legendItem}>
-          <View style={[calendarStyles.legendDot, { backgroundColor: '#10B981' }]} />
-          <Text style={[calendarStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>전체 완료</Text>
-        </View>
-        <View style={calendarStyles.legendItem}>
-          <View style={[calendarStyles.legendDot, { backgroundColor: '#F59E0B' }]} />
-          <Text style={[calendarStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>일부 완료</Text>
-        </View>
-        <View style={calendarStyles.legendItem}>
-          <View style={[calendarStyles.legendDot, { backgroundColor: '#EF4444' }]} />
-          <Text style={[calendarStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>미완료</Text>
-        </View>
+        {[
+          { color: HEAT_COLORS.perfect, label: '100%' },
+          { color: HEAT_COLORS.excellent, label: '80%+' },
+          { color: HEAT_COLORS.good, label: '60%+' },
+          { color: HEAT_COLORS.fair, label: '40%+' },
+          { color: HEAT_COLORS.low, label: '40% 미만' },
+        ].map(({ color, label }) => (
+          <View key={label} style={calendarStyles.legendItem}>
+            <View style={[calendarStyles.legendDot, { backgroundColor: color }]} />
+            <Text style={[calendarStyles.legendText, { color: theme.colors.onSurfaceVariant }]}>{label}</Text>
+          </View>
+        ))}
       </View>
     </Surface>
   );
@@ -674,32 +803,83 @@ const calendarStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.base,
   },
   title: {
     fontSize: 15,
     fontWeight: '700',
   },
+  statsGrid: {
+    flexDirection: 'row',
+    paddingVertical: spacing.md,
+    marginBottom: spacing.md,
+  },
+  statsCell: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  statsValue: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  statsLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  statsDivider: {
+    width: 1,
+    marginVertical: spacing.xs,
+  },
+  calHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xs,
+  },
+  headerBtn: { margin: 0 },
+  calTitle: { fontSize: 15, fontWeight: '700' },
+  weekRow: { flexDirection: 'row', marginBottom: spacing.xs },
+  weekCell: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs },
+  weekText: { fontSize: 11, fontWeight: '600' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  dayCell: {
+    width: `${100 / 7}%`,
+    alignItems: 'center',
+    paddingVertical: 3,
+  },
+  dayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayCircle: {
+    elevation: 2,
+  },
+  dayText: { fontSize: 13, fontWeight: '500' },
   legend: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.md,
-    marginTop: spacing.xs,
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 4,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
-    fontSize: 11,
+    fontSize: 10,
   },
 });
 
