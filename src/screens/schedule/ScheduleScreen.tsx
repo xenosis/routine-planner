@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   StyleSheet,
   TouchableOpacity,
@@ -104,6 +105,22 @@ export default function ScheduleScreen(): React.JSX.Element {
     const channel = setupRealtimeSubscription();
     return () => { channel.unsubscribe(); };
   }, [setupRealtimeSubscription]);
+
+  // 앱이 백그라운드 → 포그라운드로 돌아올 때 현재 뷰 강제 갱신
+  // (백그라운드 중 Realtime WebSocket이 끊어져 변경사항을 놓칠 수 있음)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      const { selectedDate, viewYear, viewMonth } = useScheduleStore.getState();
+      if (selectedDate !== null) {
+        fetchByDate(selectedDate).catch(() => {});
+      } else {
+        fetchByMonth(viewYear, viewMonth).catch(() => {});
+      }
+      fetchMarkedDates(viewYear, viewMonth).catch(() => {});
+    });
+    return () => sub.remove();
+  }, [fetchByDate, fetchByMonth, fetchMarkedDates]);
 
   // ── 달력 이벤트 핸들러 ───────────────────
 

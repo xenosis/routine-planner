@@ -33,6 +33,7 @@ Deno.serve(async (req) => {
     );
 
     const { schedule, sender_id, sender_name, action }: RequestBody = await req.json();
+    console.log('[notify-schedule] 요청:', { sender_id, action, title: schedule.title });
 
     // 발신자 제외한 모든 유저의 push token 조회
     const { data: tokens, error } = await supabase
@@ -40,9 +41,14 @@ Deno.serve(async (req) => {
       .select('push_token')
       .neq('user_id', sender_id);
 
-    if (error) throw error;
+    if (error) {
+      console.error('[notify-schedule] 토큰 조회 실패:', error);
+      throw error;
+    }
+    console.log('[notify-schedule] 조회된 토큰 수:', tokens?.length ?? 0);
+
     if (!tokens || tokens.length === 0) {
-      return new Response(JSON.stringify({ sent: 0 }), {
+      return new Response(JSON.stringify({ sent: 0, reason: 'no_recipients' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -66,6 +72,8 @@ Deno.serve(async (req) => {
       sound: 'default',
     }));
 
+    console.log('[notify-schedule] Expo Push 전송:', messages.map((m) => ({ to: m.to, title: m.title })));
+
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,11 +81,13 @@ Deno.serve(async (req) => {
     });
 
     const result = await response.json();
+    console.log('[notify-schedule] Expo Push 결과:', JSON.stringify(result));
 
     return new Response(JSON.stringify({ sent: messages.length, result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
+    console.error('[notify-schedule] 오류:', String(err));
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

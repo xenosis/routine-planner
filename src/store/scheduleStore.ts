@@ -173,7 +173,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       if (!userId) return;
       supabase.functions.invoke('notify-schedule', {
         body: { schedule, sender_id: userId, sender_name: displayName, action: 'add' },
-      }).catch(() => {});
+      }).then(({ error }) => {
+        if (error) console.error('[notify-schedule] add 실패:', error);
+      }).catch((e) => console.error('[notify-schedule] add 호출 오류:', e));
     });
   },
 
@@ -215,7 +217,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
       if (!userId) return;
       supabase.functions.invoke('notify-schedule', {
         body: { schedule, sender_id: userId, sender_name: displayName, action: 'update' },
-      }).catch(() => {});
+      }).then(({ error }) => {
+        if (error) console.error('[notify-schedule] update 실패:', error);
+      }).catch((e) => console.error('[notify-schedule] update 호출 오류:', e));
     });
   },
 
@@ -260,7 +264,9 @@ export const useScheduleStore = create<ScheduleState>((set, get) => ({
         if (!userId) return;
         supabase.functions.invoke('notify-schedule', {
           body: { schedule: target, sender_id: userId, sender_name: displayName, action: 'delete' },
-        }).catch(() => {});
+        }).then(({ error }) => {
+          if (error) console.error('[notify-schedule] delete 실패:', error);
+        }).catch((e) => console.error('[notify-schedule] delete 호출 오류:', e));
       });
     }
   },

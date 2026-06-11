@@ -109,6 +109,7 @@ export default function AddScheduleScreen({
   const [showLocationSearch, setShowLocationSearch] = useState(false);
 
   const [alarmTimes, setAlarmTimes] = useState<number[]>(() => schedule?.alarmTimes ?? []);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Paper TextInput label 즉시 표시 트릭:
   // 값이 있는 필드는 measured=false일 때 label opacity=0으로 숨겨짐.
@@ -148,54 +149,60 @@ export default function AddScheduleScreen({
   const canSetAlarm = !!startTime && !!endTime;
 
   const handleSave = useCallback(async () => {
+    if (isSaving) return;
     if (!title.trim()) return;
     if (!repeatEnabled && !isMultiDay && startTime && endTime && endTime < startTime) return;
     if (endDate < date) return;
 
-    // 반복 일정: 알람 시각(repeatAlarmTime)을 startTime으로 사용, alarmTimes=[0]으로 고정
-    const isRepeatActive = repeatEnabled && !!(repeat);
-    const effectiveStartTime = isRepeatActive ? (repeatAlarmTime || '09:00') : startTime;
-    const effectiveEndTime = isRepeatActive ? (repeatAlarmTime || '09:00') : endTime;
-    const hasRepeatAlarm = isRepeatActive && !!repeatAlarmTime;
-    const hasAlarm = hasRepeatAlarm || (!repeatEnabled && alarmEnabled && alarmTimes.length > 0);
+    setIsSaving(true);
+    try {
+      // 반복 일정: 알람 시각(repeatAlarmTime)을 startTime으로 사용, alarmTimes=[0]으로 고정
+      const isRepeatActive = repeatEnabled && !!(repeat);
+      const effectiveStartTime = isRepeatActive ? (repeatAlarmTime || '09:00') : startTime;
+      const effectiveEndTime = isRepeatActive ? (repeatAlarmTime || '09:00') : endTime;
+      const hasRepeatAlarm = isRepeatActive && !!repeatAlarmTime;
+      const hasAlarm = hasRepeatAlarm || (!repeatEnabled && alarmEnabled && alarmTimes.length > 0);
 
-    const newSchedule: Schedule = {
-      id: schedule?.id ?? generateId(),
-      title: title.trim(),
-      date,
-      endDate: endDate !== date ? endDate : undefined,
-      startTime: effectiveStartTime,
-      endTime: effectiveEndTime,
-      category,
-      color: nameTagColor || getCategoryColor(category, scheduleCategories),
-      memo: memo.trim() || undefined,
-      alarm: hasAlarm,
-      alarmTimes: hasRepeatAlarm ? [0] : (hasAlarm ? alarmTimes : undefined),
-      location: location.trim() || undefined,
-      nameTag: nameTag.trim() || undefined,
-      nameTagColor: nameTag.trim() ? (nameTagColor || undefined) : undefined,
-      repeat: repeat ?? undefined,
-      repeatUntil: repeatUntil || undefined,
-    };
+      const newSchedule: Schedule = {
+        id: schedule?.id ?? generateId(),
+        title: title.trim(),
+        date,
+        endDate: endDate !== date ? endDate : undefined,
+        startTime: effectiveStartTime,
+        endTime: effectiveEndTime,
+        category,
+        color: nameTagColor || getCategoryColor(category, scheduleCategories),
+        memo: memo.trim() || undefined,
+        alarm: hasAlarm,
+        alarmTimes: hasRepeatAlarm ? [0] : (hasAlarm ? alarmTimes : undefined),
+        location: location.trim() || undefined,
+        nameTag: nameTag.trim() || undefined,
+        nameTagColor: nameTag.trim() ? (nameTagColor || undefined) : undefined,
+        repeat: repeat ?? undefined,
+        repeatUntil: repeatUntil || undefined,
+      };
 
-    // onSave 먼저 호출 (store.updateSchedule이 기존 알람을 취소하므로, 반드시 완료 후 새 알람 등록)
-    await (onSave(newSchedule) as unknown as Promise<void> | void);
+      // onSave 먼저 호출 (store.updateSchedule이 기존 알람을 취소하므로, 반드시 완료 후 새 알람 등록)
+      await (onSave(newSchedule) as unknown as Promise<void> | void);
 
-    // 알람 예약: 반복이면 다음 발생일 1회, 비반복이면 복수 알람 등록
-    if (newSchedule.alarm && newSchedule.alarmTimes?.length) {
-      if (newSchedule.repeat) {
-        await scheduleNextRepeatAlarm(newSchedule).catch(() => {});
-      } else {
-        await scheduleAlarmNotifications(newSchedule);
+      // 알람 예약: 반복이면 다음 발생일 1회, 비반복이면 복수 알람 등록
+      if (newSchedule.alarm && newSchedule.alarmTimes?.length) {
+        if (newSchedule.repeat) {
+          await scheduleNextRepeatAlarm(newSchedule).catch(() => {});
+        } else {
+          await scheduleAlarmNotifications(newSchedule);
+        }
       }
+    } finally {
+      setIsSaving(false);
     }
   }, [
-    title, date, endDate, startTime, endTime, category,
+    isSaving, title, date, endDate, startTime, endTime, category,
     location, nameTag, nameTagColor, memo, alarmEnabled, alarmTimes,
     repeat, repeatUntil, repeatEnabled, repeatAlarmTime, schedule, onSave,
   ]);
 
-  const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid;
+  const isSaveDisabled = !title.trim() || !isTimeValid || !isDateValid || isSaving;
 
   return (
     <Modal
@@ -657,6 +664,7 @@ export default function AddScheduleScreen({
               mode="contained"
               onPress={handleSave}
               disabled={isSaveDisabled}
+              loading={isSaving}
               style={[styles.saveButton, isEditMode && onDelete ? styles.saveButtonPartial : styles.saveButtonFull]}
               contentStyle={styles.footerButtonContent}
               labelStyle={styles.footerButtonLabel}

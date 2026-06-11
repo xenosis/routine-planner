@@ -10,6 +10,7 @@ import { useCategoryStore } from '../../store/categoryStore';
 import { useRoutineStore } from '../../store/routineStore';
 import { useTodoStore } from '../../store/todoStore';
 import { backupToSupabase, restoreFromSupabase, getLastBackupTime } from '../../db/backupDb';
+import { registerPushToken } from '../../utils/pushTokenManager';
 import type { Category } from '../../db/categoryDb';
 
 // ─────────────────────────────────────────────
@@ -185,6 +186,7 @@ export default function AccountScreen(): React.JSX.Element {
   const [displayName, setDisplayName] = useState(savedName);
   const [selectedColor, setSelectedColor] = useState(savedColor);
   const [saving, setSaving] = useState(false);
+  const [pushRegistering, setPushRegistering] = useState(false);
 
   // ── 백업/복원 상태 ──────────────────────────
   const fetchRoutines = useRoutineStore((s) => s.fetchRoutines);
@@ -277,6 +279,19 @@ export default function AccountScreen(): React.JSX.Element {
     const err = await updateDisplayName(trimmed, selectedColor);
     setSaving(false);
     if (err) Alert.alert('저장 실패', err);
+  };
+
+  const handlePushRegister = async () => {
+    if (!session?.user.id || pushRegistering) return;
+    setPushRegistering(true);
+    try {
+      await registerPushToken(session.user.id);
+      showSnack('알림 등록 완료');
+    } catch (e) {
+      showSnack('알림 등록 실패: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setPushRegistering(false);
+    }
   };
 
   const handleLogout = () => {
@@ -587,6 +602,20 @@ export default function AccountScreen(): React.JSX.Element {
           </>
         )}
 
+        {/* 알림 재등록 */}
+        {session && (
+          <Button
+            mode="contained-tonal"
+            onPress={handlePushRegister}
+            loading={pushRegistering}
+            disabled={pushRegistering}
+            icon="bell-ring-outline"
+            style={styles.pushRegisterButton}
+          >
+            알림 재등록
+          </Button>
+        )}
+
         {/* 로그아웃 버튼 */}
         <Button
           mode="outlined"
@@ -800,9 +829,14 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: borderRadius.sm,
   },
-  logoutButton: {
+  pushRegisterButton: {
     marginHorizontal: spacing.base,
     marginTop: spacing.lg,
+    borderRadius: borderRadius.md,
+  },
+  logoutButton: {
+    marginHorizontal: spacing.base,
+    marginTop: spacing.sm,
     borderRadius: borderRadius.md,
     borderColor: 'transparent',
   },
